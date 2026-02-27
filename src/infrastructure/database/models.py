@@ -1,3 +1,4 @@
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 from src.infrastructure.database.connection import Base
@@ -51,4 +52,4 @@ class RaceSummary(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_key = Column(Integer, index=True)
     content = Column(Text)
-    # embedding = Column(Vector(1536))  # pgvector - se habilita cuando se instale pgvector
+    embedding = Column(Vector(1536), nullable=True)
