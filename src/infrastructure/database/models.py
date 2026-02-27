@@ -52,4 +52,4 @@ class RaceSummary(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_key = Column(Integer, index=True)
     content = Column(Text)
-    embedding = Column(Vector(1536), nullable=True)
+    embedding = Column(Vector(768), nullable=True)
