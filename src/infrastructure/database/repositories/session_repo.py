@@ -1,8 +1,20 @@
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session as DBSession
 
 from src.core.entities.session import SessionCreate
 from src.infrastructure.database.models import Session
+
+
+def get_all_sessions(db: DBSession, year: int | None = None) -> list[Session]:
+    stmt = select(Session).order_by(Session.date_start)
+    if year is not None:
+        stmt = stmt.where(Session.year == year)
+    return list(db.scalars(stmt))
+
+
+def get_session_by_key(db: DBSession, session_key: int) -> Session | None:
+    return db.get(Session, session_key)
 
 
 def upsert_sessions(db: DBSession, sessions: list[SessionCreate]) -> int:
