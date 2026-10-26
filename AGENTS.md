@@ -1,0 +1,195 @@
+# Coding standard: F1 Strategy Agent
+
+Read this before the first edit. It binds every author and every model. If code, a test, a plan or an idea contradicts this file or an accepted ADR in `docs/adr/`, stop and say so. Do not reverse a decision in passing.
+
+## What we are building
+
+A Formula 1 platform with three parts that share one data pipeline:
+
+1. **Pipeline.** Historical sessions from OpenF1 are ingested raw into a document store, cleaned asynchronously into PostgreSQL, and replayed as if live (ADR 0001).
+2. **Strategy simulator.** The user sets weather, track temperature, wind, tyre compound, pit plan, starting fuel and driver aggressiveness, and sees predicted lap times and tyre degradation. The predictive model is calibrated on real stints.
+3. **Assistant.** An agent with RAG over pgvector (ADR 0002) answers questions with facts it retrieved or computed, and cites them. It never invents a number.
+
+It ships to production from a monorepo with continuous deployment (ADR 0003). It must run locally with one command before it runs anywhere else.
+
+## Status
+
+Rebuild in progress. The code under `src/`, `scripts/` and `alembic/` is the first MVP (February 2026): synchronous, with no tests. It is replaced, not patched. The audit that motivates the rebuild is in `docs/devlog/2026-10-26-01-audit-and-agent-setup.md`.
+
+Next, in order. Each phase is planned in the session that starts it and recorded in the devlog.
+
+0. **Foundation.** Monorepo layout, tooling (lint, format, types, tests), one `make check`, CI, containers for every service.
+1. **Ingestion.** Async OpenF1 client within the free rate limit, raw documents in the NoSQL store, idempotent by request.
+2. **Clean model.** Normalized PostgreSQL schema per season (drivers per session, stints, compounds, weather, race control, results), migrations, typed numbers.
+3. **Replay.** A session replayed at 1x/Nx through a queue to consumers and to the browser.
+4. **Predictive engine.** Degradation and lap-time model, calibrated on stints, with golden cases from real races.
+5. **Simulator API and UI.**
+6. **Assistant.** Retrieval over facts and rules, tools (stats query, semantic search, simulation), streaming answers with citations.
+7. **Production.** Deploy on merge, observability, a public demo.
+
+Update this section in the change that closes a phase.
+
+## Where things are
+
+| Path | What it holds |
+|---|---|
+| `AGENTS.md` | This standard |
+| `CLAUDE.md` | Entry point for Claude Code |
+| `.claude/skills/` | `self-grade`, `tech-audit`, `devlog` |
+| `docs/adr/` | Architecture decisions, numbered, one per file. `README.md` holds the index and the template |
+| `docs/devlog/` | One entry per working session with the agent, in order. `README.md` holds the format and the index |
+| `src/`, `scripts/`, `alembic/` | The first MVP, to be replaced in phases 0 to 2 |
+
+Phase 0 adds the monorepo directories. Add every new top-level path here in the change that creates it.
+
+## Before the first edit
+
+Write one sentence: what the user sees, what the API returns, or what row exists after the change. If it is vague, do not code yet.
+
+Then put both blocks in the thread. No code until they are there.
+
+```
+Owner check:
+- Symptom or goal:
+- Cause (mechanism, not the symptom):
+- Owner (the module that already decides this):
+- Path: through | around
+- Reset: wipe the volumes, run the stack and the ingestion again. Does it still hold? yes | no
+```
+
+`around` means stop. It is not done if someone has to run SQL by hand, re-run a script in a special order, or special-case one race, driver or season.
+
+```
+Evidence:
+- Claim:
+- Label: proven | inferred
+- Artifact (if proven): path:line, test, command output, API response, URL with the quote
+```
+
+Proven means an artifact from this session. Inferred means the source is silent, and an inferred claim cannot justify a change. Absence is not evidence: "I did not find a field in OpenF1" is a gap to report, not permission to invent one.
+
+The first answer from a model is usually a local patch. Discard it until the cause and the owner are named. The smallest change is the one that still goes through the owner.
+
+## Architecture
+
+Layers, from the inside out. An inner layer never imports an outer one.
+
+- **Domain.** Pure Python: entities, value objects, the simulation and degradation model. No I/O, no clock, no randomness unless a seeded generator is passed in. No SQLAlchemy, Pydantic settings, HTTP or LLM SDK.
+- **Application.** Use cases and ports (protocols). A use case receives its adapters; it does not build them.
+- **Adapters.** OpenF1, the document store, PostgreSQL, pgvector, the queue, the LLM, HTTP routes, WebSocket/SSE. Each external SDK is imported by exactly one adapter module.
+- **Frontend.** Renders what the API returns. It does not compute lap times, degradation or strategy outcomes.
+
+Owners:
+
+| Concern | Owner (through) | Around (forbidden) |
+|---|---|---|
+| A lap time or degradation prediction | The domain model | The LLM, the UI, or a SQL expression |
+| A fact in an answer (time, position, gap, compound) | A tool that queries the clean store | Model prose or a generated summary |
+| Raw data as received | The document store, written once per request | Editing raw documents after the fact |
+| Clean data | Migrations plus the transform from raw | Hand-edited rows, ad-hoc `UPDATE`s |
+| Order of replayed events | The event timestamp plus an explicit tie-break | Arrival order from the API or the queue |
+| Request and response shapes | The OpenAPI schema FastAPI emits, and the client generated from it | A hand-written TypeScript type of an API response |
+| Secrets and config | Environment variables, read once by the settings module | A literal in code, a default that hides a missing value in production |
+
+## Determinism
+
+- Join two facts by an id written when the fact was produced (`session_key`, `driver_number` plus `session_key`, `lap_number`, stint number). Never by time proximity ("the closest interval within 2 s").
+- When several rows could win, the tie-break is an explicit comparator with named fields in a fixed order. `ORDER BY ... LIMIT 1` with no tie-break is not a decision.
+- Timestamps are timezone-aware UTC everywhere. A naive `datetime` is a bug.
+- Idempotency keys come from the source (`endpoint` + query params + `session_key`). No clock, no random.
+- The simulation is reproducible: the same inputs and seed give the same output.
+
+## Async and concurrency
+
+- I/O is async end to end in services: HTTP client, database driver, queue, LLM client. A blocking call inside a coroutine is a bug; CPU-heavy work goes to a process or thread pool on purpose.
+- Concurrency is bounded (semaphore, queue size, worker count) and named in config. Unbounded `gather` over a season is a bug.
+- External rate limits are enforced in the adapter that calls the service (OpenF1 free tier: 3 req/s and 30 req/min).
+- Retries have a limit and backoff, and only for errors that can succeed on retry.
+- Every background task has an owner that awaits or cancels it on shutdown.
+
+## Data
+
+- The schema is the contract. `NOT NULL` means the code does not hunt for nulls. A nullable column means the code handles null.
+- Numbers are numbers: gaps in seconds as numeric, laps behind as an integer column, never a string like `"+1 LAP"`.
+- Drivers and teams are per session, because numbers and seats change across and within seasons.
+- Migrations are one-way, never edited after they ran anywhere, and never drop data in the same step that introduces its replacement.
+- Parameterized queries only. Select the columns you need. Index what you filter. No N+1.
+- The vector index is declared in a migration with its distance operator.
+
+## Model and RAG
+
+- The LLM chooses tools and writes prose. Numbers in the answer come from tool results, and the answer cites them.
+- What is embedded is source material (rules, curated race facts with their ids), not prose the model wrote about the data.
+- The prompt never contains secrets. Prompts and model names live in one adapter module.
+- If retrieval returns nothing relevant, the answer says so.
+- The model adapter is swappable: a local model for development, a hosted one in production, behind one port.
+
+## No magic strings
+
+Closed sets are enums or `Literal` types, defined once: compounds, session types, track status and flags, event types, tool names, queue topics. Call sites use the constant. Raw API values are mapped to enums once, at the ingestion boundary.
+
+## Comments
+
+The default is zero. The only comment that stays explains a non-obvious why that a name cannot carry: an external quirk with its source, a float tolerance, a trade-off. Never: restating the line, section banners, step labels, `TODO`/`FIXME`, commented-out code. Docstrings on public functions only when the name and signature cannot say it (units, edge cases). Prefer a better name or an extracted function.
+
+## Code shape
+
+- One function, one job. Past about 40 lines, split.
+- Names carry the unit and the meaning: `lap_time_s`, `track_temp_c`, `fuel_kg`, `tyre_age_laps`.
+- Early return; nesting at most three levels.
+- Discriminated unions, not two booleans for one state.
+- `None` is absence. `0` and `""` are values.
+- No `Any` without a written justification. No `cast` before narrowing is exhausted. `mypy --strict` and `tsc --strict`.
+- Fail loud. No catch-log-continue: a failed load, parse or model call fails the operation and names what is missing.
+- After a refactor, grep for the old implementation and delete it in the same change.
+
+## Tests
+
+- Test behavior through the public function or the HTTP route, not private steps.
+- The domain model is tested hard: every branch, edge cases first (zero laps, one-lap stint, wet compound in the dry, empty fuel, a pit on the last lap).
+- Every new branch has a negative test: the thing that must not happen does not happen.
+- Assert full expected values. No soft asserts whose `else` cannot fail.
+- Sabotage once: break the function on purpose, confirm the exact test goes red, restore it.
+- Golden cases from real races record their source (`session_key`, driver, laps) and the tolerance.
+- Adapters are tested against real services in containers, not mocks of our own domain.
+- A test file must live on a path the test command and CI run. Name the command.
+- Fix pre-existing failures you hit, or report them. Do not ignore them as "not this task".
+
+## Security
+
+- External input is validated at the boundary.
+- Secrets live in `.env` locally and in the host's secret store when deployed. Never in git, an image, a log or a prompt. `.env.example` lists every variable with a safe placeholder.
+- Before any push, check the diff for secrets.
+
+## Docs
+
+- Code, docs, ADRs and the devlog are in English. Straight quotes, no em-dashes.
+- `README.md` describes what exists today, not what is planned. When it gains a Spanish twin, `README.es.md` changes in the same commit.
+- A lasting decision gets an ADR in `docs/adr/` (context, options, decision, consequences). A one-session tweak does not.
+- Every working session with the agent ends with a devlog entry (`devlog` skill). One home per fact: the devlog links to ADRs instead of copying them.
+
+## Before presenting work
+
+`make check` exits 0 once phase 0 creates it: lint, format check, type check, tests with coverage, and build, for backend and frontend. Until then, say which checks do not exist yet; do not imply they ran.
+
+Then run the `self-grade` and `tech-audit` skills. Fix and re-run until every applicable self-grade row is **A** and the audit says **SHIP**. Only then propose commits.
+
+## Git
+
+- Never work on `main`. Branch first: `feat/`, `fix/`, `refactor/`, `test/`, `docs/`, `chore/`, `ci/`.
+- Conventional commits (`feat(sim): ...`). Large changes go in several commits, one per layer.
+- Show the commit plan and wait for an OK before committing.
+- PR description: **What**, **Why**, **How**, **Verification** (commands run and their result). No co-author or tool attribution lines.
+- One concern per PR.
+
+## When you delegate to another model
+
+A subagent does not inherit the chat. Its prompt includes these points verbatim, plus the exact file allowlist:
+
+1. `AGENTS.md` and the accepted ADRs are authoritative. If code, schema or data diverge from the task, stop and report. Do not invent fields, enums, columns or endpoints.
+2. No narrative comments, no magic strings, pure domain, async I/O, no LLM call outside its adapter.
+3. Touch only the named files. Do not stage anything.
+4. Before calling the increment done, review the diff against `AGENTS.md`. A violation is fixed, not noted.
+5. One concern per change.
+
+When it returns, run `self-grade` and `tech-audit` on its increment before presenting it.
