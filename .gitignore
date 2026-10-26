@@ -1,90 +1,40 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-*.egg
-*.egg-info/
+.venv/
 dist/
 build/
-eggs/
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
+*.egg-info/
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-env/
+# Tooling caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+.coverage
+coverage/
+htmlcov/
+coverage.xml
+.openapi-check/
 
-# Poetry
-poetry.lock
-
-# Pydantic
-*.pydantic/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Node
+node_modules/
 
 # Environment variables
 .env
 .env.*
 !.env.example
 
-# AWS
-.aws/
-*.pem
-aws-credentials
-.chalice/deployed/
-.chalice/deployments/
-samconfig.toml
-cdk.out/
-.serverless/
+# Local agent and browser artifacts
+.playwright-mcp/
 
-# PostgreSQL
-*.sql.bak
-*.dump
-*.pgdata/
-
-# Migrations
-**/migrations/versions/*.pyc
-alembic/versions/__pycache__/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-coverage.xml
-*.cover
-
-# Mypy / type checking
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Ruff / linting
-.ruff_cache/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# OS
+# IDE and OS
+.vscode/
+.idea/
+*.swp
 .DS_Store
 Thumbs.db
 desktop.ini
 
 # Logs
 *.log
-logs/
-
-# Distribution / packaging
-*.tar.gz
-*.whl
