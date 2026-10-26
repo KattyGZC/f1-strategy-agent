@@ -9,6 +9,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | Date | Entry |
 |---|---|
 | 2026-10-26 | [01. Audit of the first MVP and agent setup](2026-10-26-01-audit-and-agent-setup.md) |
+| 2026-10-26 | [02. Phase 0: foundation](2026-10-26-02-phase-0-foundation.md) |
 
 ## Template
 
