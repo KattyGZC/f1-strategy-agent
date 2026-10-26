@@ -1,0 +1,68 @@
+[project]
+name = "f1-strategy"
+version = "0.1.0"
+description = "Backend of the F1 Strategy Agent: ingestion, replay, predictive engine, assistant and API"
+authors = [{ name = "KattyGZC" }]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "pydantic-settings>=2.16.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF", "ASYNC", "DTZ", "PT", "PL", "ANN", "S", "TID"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --cov=f1_strategy --cov-report=term-missing --cov-fail-under=90"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ['if __name__ == "__main__":']
+
+[tool.importlinter]
+root_package = "f1_strategy"
+
+[[tool.importlinter.contracts]]
+name = "Inner layers never import outer ones"
+type = "layers"
+layers = [
+    "f1_strategy.adapters",
+    "f1_strategy.application",
+    "f1_strategy.domain",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "import-linter>=2.15",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.2",
+]
