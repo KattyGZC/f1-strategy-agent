@@ -26,7 +26,7 @@ The author did not redirect the agent this session. The agent changed course on 
 - TypeScript was pinned to 5.9 because `openapi-typescript` does not support 6, rather than forcing the install.
 - Tests exposed that the frontend client built relative URLs that fail outside the browser; `baseUrl` became required.
 - Grading found a request not cancelled on unmount, a lint rule (`PLR2004`) disabled globally, and a frontend container without a healthcheck. All three were fixed before presenting.
-- Agent mistakes, caught and fixed in the session: a uv Docker image tag that does not exist; a healthcheck on `localhost` that resolved to IPv6 while nginx listened on IPv4; a first commit that also contained the MVP removal, redone on the unpushed branch before review.
+- Agent mistakes, caught and fixed in the session: a uv Docker image tag that does not exist; a healthcheck on `localhost` that resolved to IPv6 while nginx listened on IPv4; a first commit that also contained the MVP removal, redone on the unpushed branch before review; `astral-sh/setup-uv@v10` in CI, a tag the project does not publish (it only tags full versions), which failed the first run of the backend and contract jobs and was pinned to `v10.3.2`.
 
 ## Verification
 
@@ -34,9 +34,9 @@ The author did not redirect the agent this session. The agent changed course on 
 - Sabotage: dropping the `/api` prefix turned 3 tests red; changing the status text, 2; removing the request cancellation, 1. All restored.
 - Contract: bumping the API version made `make openapi-check` exit 2; restored, exit 0.
 - Reset: `docker compose down -v`, then `make up`: four services healthy, `GET /api/health` through nginx returned `{"status":"ok"}`, and the page rendered "API status: ok" in a browser.
-- actionlint on the workflow: no findings. The workflow itself has not run on GitHub yet; it runs on the pull request.
+- actionlint on the workflow: no findings. actionlint does not resolve action tags, so it did not catch the missing `setup-uv@v10`.
+- CI on [PR #2](https://github.com/KattyGZC/f1-strategy-agent/pull/2): the first run failed in backend and contract (`Unable to resolve action astral-sh/setup-uv@v10`); after the pin, all five jobs passed (changes, backend, frontend, contract, stack).
 
 ## Next
 
-- Confirm CI is green on the pull request.
 - Phase 1, ingestion: the async OpenF1 client within the free rate limit, raw documents in MongoDB, and the settings module with the first variables. Measure the size of one season against the 512 MB free tier (ADR 0004).
