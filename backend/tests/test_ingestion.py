@@ -5,12 +5,14 @@ import pytest
 
 from f1_strategy.application.ingestion import (
     IngestionReport,
+    IngestLatestGrandPrixTelemetry,
     IngestSeason,
     IngestSessionTelemetry,
     SessionNotFoundError,
     SessionNotSettledError,
 )
 from f1_strategy.domain.openf1 import (
+    TELEMETRY_ENDPOINTS,
     Endpoint,
     JsonObject,
     Param,
@@ -18,8 +20,10 @@ from f1_strategy.domain.openf1 import (
     RawResponse,
     SessionType,
     drivers_request,
+    grand_prix_request,
     meetings_request,
     session_request,
+    settled_cutoff,
 )
 from tests.factories import (
     CANCELLED_KEY,
@@ -89,6 +93,17 @@ class FakeStore:
     async def put(self, response: RawResponse) -> None:
         self.responses.setdefault(response.request.key, response)
 
+    async def delete_telemetry_except(self, session_key: int) -> int:
+        doomed = [
+            key
+            for key, response in self.responses.items()
+            if response.request.endpoint in TELEMETRY_ENDPOINTS
+            and response.request.session_key != session_key
+        ]
+        for key in doomed:
+            del self.responses[key]
+        return len(doomed)
+
 
 def season_source(failing: frozenset[str] = frozenset()) -> FakeSource:
     return FakeSource({}, failing, season_index=SEASON_2024)
@@ -102,6 +117,12 @@ def telemetry(source: FakeSource, store: FakeStore) -> IngestSessionTelemetry:
     return IngestSessionTelemetry(source, store, 3, SETTLE, HALF_HOUR)
 
 
+def latest_grand_prix_telemetry(
+    source: FakeSource, store: FakeStore
+) -> IngestLatestGrandPrixTelemetry:
+    return IngestLatestGrandPrixTelemetry(source, store, 3, SETTLE, HALF_HOUR)
+
+
 @pytest.mark.anyio
 async def test_season_stores_the_index_and_every_endpoint_of_the_chosen_sessions() -> None:
     source, store = season_source(), FakeStore()
@@ -111,7 +132,7 @@ async def test_season_stores_the_index_and_every_endpoint_of_the_chosen_sessions
     )
 
     expected = 2 + RACE_ENDPOINT_COUNT + QUALIFYING_ENDPOINT_COUNT
-    assert report == IngestionReport(sessions=2, requests=expected, fetched=expected)
+    assert report == IngestionReport(sessions=2, requests=expected, fetched=expected, deleted=0)
     assert sorted(source.fetched) == sorted(store.responses)
     assert meetings_request(2024).key in store.responses
     assert "intervals?session_key=9472" in store.responses
@@ -250,7 +271,9 @@ async def test_telemetry_stores_every_driver_window_of_both_endpoints() -> None:
     report = await telemetry(source, store)(RACE_KEY, SEASON_2024_SETTLED)
 
     windows = 2 * 2 * 4
-    assert report == IngestionReport(sessions=1, requests=2 + windows, fetched=2 + windows)
+    assert report == IngestionReport(
+        sessions=1, requests=2 + windows, fetched=2 + windows, deleted=0
+    )
     car_data_keys = [key for key in store.responses if key.startswith("car_data?")]
     location_keys = [key for key in store.responses if key.startswith("location?")]
     assert len(car_data_keys) == len(location_keys) == 2 * 4
@@ -291,3 +314,118 @@ async def test_telemetry_needs_exactly_one_session(session_rows: list[JsonObject
         await telemetry(source, FakeStore())(RACE_KEY, SEASON_2024_SETTLED)
 
     assert drivers_request(RACE_KEY).key not in source.fetched
+
+
+OLDER_RACE_KEY = 9480
+OLDER_TELEMETRY = RawRequest.of(
+    Endpoint.CAR_DATA, {Param.SESSION_KEY: OLDER_RACE_KEY, Param.DRIVER_NUMBER: 1}
+)
+OLDER_LAPS = RawRequest.of(Endpoint.LAPS, {Param.SESSION_KEY: OLDER_RACE_KEY})
+GRAND_PRIX_INDEX = grand_prix_request(settled_cutoff(SEASON_2024_SETTLED, SETTLE))
+
+
+async def store_with_an_older_race() -> FakeStore:
+    store = FakeStore()
+    for request in (OLDER_TELEMETRY, OLDER_LAPS):
+        await store.put(RawResponse(request, [], FETCHED_AT))
+    return store
+
+
+def latest_grand_prix_source(
+    races: list[JsonObject], failing: frozenset[str] = frozenset()
+) -> FakeSource:
+    return FakeSource(
+        {GRAND_PRIX_INDEX.key: races, drivers_request(RACE_KEY).key: DRIVERS}, failing
+    )
+
+
+@pytest.mark.anyio
+async def test_telemetry_of_a_session_deletes_the_telemetry_of_every_other_session() -> None:
+    store = await store_with_an_older_race()
+    source = telemetry_source([session_row(RACE_KEY, "Race")])
+
+    report = await telemetry(source, store)(RACE_KEY, SEASON_2024_SETTLED)
+
+    assert report.deleted == 1
+    assert OLDER_TELEMETRY.key not in store.responses
+    assert OLDER_LAPS.key in store.responses
+    assert {response.request.session_key for response in store.responses.values()} == {
+        RACE_KEY,
+        OLDER_RACE_KEY,
+    }
+
+
+@pytest.mark.anyio
+async def test_the_latest_grand_prix_telemetry_is_stored_and_replaces_the_older_race() -> None:
+    store = await store_with_an_older_race()
+    source = latest_grand_prix_source(
+        [
+            session_row(OLDER_RACE_KEY, "Race", date_end="2024-02-25T17:00:00+00:00"),
+            session_row(RACE_KEY, "Race"),
+        ]
+    )
+
+    report = await latest_grand_prix_telemetry(source, store)(SEASON_2024_SETTLED)
+
+    windows = 2 * 2 * 4
+    assert report == IngestionReport(
+        sessions=1, requests=2 + windows, fetched=2 + windows, deleted=1
+    )
+    assert source.fetched[:2] == [GRAND_PRIX_INDEX.key, drivers_request(RACE_KEY).key]
+    telemetry_session_keys = {
+        response.request.session_key
+        for response in store.responses.values()
+        if response.request.endpoint in TELEMETRY_ENDPOINTS
+    }
+    assert telemetry_session_keys == {RACE_KEY}
+
+
+@pytest.mark.anyio
+async def test_a_failed_telemetry_run_keeps_the_telemetry_of_the_older_race() -> None:
+    store = await store_with_an_older_race()
+    failing = frozenset(
+        {
+            "car_data?date<2024-03-02T15%3A30%3A00%2B00%3A00&date>=2024-03-02T15%3A00%3A00"
+            "%2B00%3A00&driver_number=1&session_key=9472"
+        }
+    )
+    source = latest_grand_prix_source([session_row(RACE_KEY, "Race")], failing)
+
+    with pytest.raises(SourceFailedError):
+        await latest_grand_prix_telemetry(source, store)(SEASON_2024_SETTLED)
+
+    assert OLDER_TELEMETRY.key in store.responses
+
+
+@pytest.mark.anyio
+async def test_a_second_latest_grand_prix_run_fetches_and_deletes_nothing() -> None:
+    store = FakeStore()
+    races = [session_row(RACE_KEY, "Race")]
+    await latest_grand_prix_telemetry(latest_grand_prix_source(races), store)(SEASON_2024_SETTLED)
+    second_source = latest_grand_prix_source(races)
+
+    report = await latest_grand_prix_telemetry(second_source, store)(SEASON_2024_SETTLED)
+
+    assert second_source.fetched == []
+    assert (report.fetched, report.deleted) == (0, 0)
+
+
+@pytest.mark.anyio
+async def test_without_a_settled_grand_prix_nothing_is_ingested_or_deleted() -> None:
+    store = await store_with_an_older_race()
+    race_evening = RACE_END + timedelta(hours=1)
+    source = FakeSource(
+        {
+            grand_prix_request(settled_cutoff(race_evening, SETTLE)).key: [
+                session_row(RACE_KEY, "Race")
+            ]
+        }
+    )
+
+    with pytest.raises(
+        SessionNotFoundError, match=r"no Grand Prix settled before 2024-03-02T12:00:00\+00:00"
+    ):
+        await latest_grand_prix_telemetry(source, store)(race_evening)
+
+    assert drivers_request(RACE_KEY).key not in source.fetched
+    assert OLDER_TELEMETRY.key in store.responses

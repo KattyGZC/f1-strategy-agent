@@ -1,12 +1,13 @@
 from contextlib import suppress
 
-from pymongo import AsyncMongoClient
+from pymongo import ASCENDING, AsyncMongoClient
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
 
-from f1_strategy.domain.openf1 import JsonObject, RawRequest, RawResponse
+from f1_strategy.domain.openf1 import TELEMETRY_ENDPOINTS, JsonObject, RawRequest, RawResponse
 
 COLLECTION = "openf1_responses"
+ENDPOINT_SESSION_INDEX = "endpoint_session_key"
 
 type MongoDocument = dict[str, object]
 
@@ -14,6 +15,11 @@ type MongoDocument = dict[str, object]
 class MongoRawStore:
     def __init__(self, client: AsyncMongoClient[MongoDocument], database: str) -> None:
         self._responses: AsyncCollection[MongoDocument] = client[database][COLLECTION]
+
+    async def ensure_indexes(self) -> None:
+        await self._responses.create_index(
+            [("endpoint", ASCENDING), ("session_key", ASCENDING)], name=ENDPOINT_SESSION_INDEX
+        )
 
     async def contains(self, request: RawRequest) -> bool:
         return await self._responses.count_documents({"_id": request.key}, limit=1) == 1
@@ -40,3 +46,12 @@ class MongoRawStore:
                     "fetched_at": response.fetched_at,
                 }
             )
+
+    async def delete_telemetry_except(self, session_key: int) -> int:
+        result = await self._responses.delete_many(
+            {
+                "endpoint": {"$in": [str(endpoint) for endpoint in TELEMETRY_ENDPOINTS]},
+                "session_key": {"$ne": session_key},
+            }
+        )
+        return result.deleted_count

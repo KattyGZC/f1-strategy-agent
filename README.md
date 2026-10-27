@@ -16,7 +16,7 @@ Phase 0, the foundation:
 Phase 1, ingestion:
 
 - **Raw OpenF1 data in MongoDB**: every response of a season's Race and Qualifying sessions, one document per request, keyed by the endpoint and its parameters. A session is ingested once it ended at least `SESSION_SETTLE_H` hours ago (6 by default), so the season in progress works too: run it again after a race weekend and it adds only the new sessions. The client stays under OpenF1's free limit (3 requests per second, 30 per minute) and retries only errors that can succeed on retry.
-- **Car telemetry** (`car_data`, `location`) for one session at a time, per driver in 30-minute windows. A whole season of it would not fit the free MongoDB tier ([ADR 0006](docs/adr/0006-raw-data-scope.md)).
+- **Car telemetry** (`car_data`, `location`) of the latest settled Grand Prix, per driver in 30-minute windows. Only one session of telemetry is kept: when a new one is fully stored, the previous one is deleted, because each race weighs about 150 MB and the free MongoDB tier is 512 MB ([ADR 0007](docs/adr/0007-telemetry-of-the-latest-grand-prix.md)).
 
 The clean model, the replay, the simulator and the assistant do not exist yet.
 
@@ -35,7 +35,8 @@ Ingest raw data while the stack is up:
 
 ```sh
 make ingest YEAR=2026              # settled Race and Qualifying sessions, about 20 minutes per full season
-make ingest-telemetry SESSION=9472 # car_data and location of one session (2024 Bahrain race)
+make ingest-telemetry              # car_data and location of the latest settled Grand Prix
+make ingest-telemetry SESSION=9472 # or of another session (2024 Bahrain race); either replaces the stored telemetry
 ```
 
 If a run fails, it exits with code 1 and one line naming the request that failed. Run the same command again: what was stored is skipped and the run continues from there.

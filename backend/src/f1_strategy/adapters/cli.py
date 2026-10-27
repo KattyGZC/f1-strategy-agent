@@ -13,6 +13,7 @@ from f1_strategy.adapters.raw_store import MongoDocument, MongoRawStore
 from f1_strategy.adapters.settings import Settings
 from f1_strategy.application.ingestion import (
     IngestionReport,
+    IngestLatestGrandPrixTelemetry,
     IngestSeason,
     IngestSessionTelemetry,
     RawSource,
@@ -71,8 +72,11 @@ def _parser() -> argparse.ArgumentParser:
         help=f"repeatable; default: {', '.join(DEFAULT_SESSION_TYPES)}",
     )
     season.set_defaults(ingest=_ingest_season)
-    telemetry = commands.add_parser("telemetry", help="car_data and location of one session")
-    telemetry.add_argument("--session-key", type=int, required=True)
+    telemetry = commands.add_parser(
+        "telemetry",
+        help="car_data and location of one session; other sessions' telemetry is deleted",
+    )
+    telemetry.add_argument("--session-key", type=int, help="default: the latest settled Grand Prix")
     telemetry.set_defaults(ingest=_ingest_telemetry)
     return parser
 
@@ -96,6 +100,7 @@ async def _run(
     ):
         source = _source(http, settings, clock)
         store = MongoRawStore(mongo, settings.mongo_database)
+        await store.ensure_indexes()
         ingest: Ingest = args.ingest
         return await ingest(args, source, store, settings, clock())
 
@@ -124,14 +129,16 @@ async def _ingest_telemetry(
     settings: Settings,
     now: datetime,
 ) -> IngestionReport:
-    ingest_telemetry = IngestSessionTelemetry(
+    adapters = (
         source,
         store,
         settings.openf1_max_concurrency,
         timedelta(hours=settings.session_settle_h),
         timedelta(minutes=settings.telemetry_window_min),
     )
-    return await ingest_telemetry(args.session_key, now)
+    if args.session_key is None:
+        return await IngestLatestGrandPrixTelemetry(*adapters)(now)
+    return await IngestSessionTelemetry(*adapters)(args.session_key, now)
 
 
 def _source(http: httpx2.AsyncClient, settings: Settings, clock: Clock) -> OpenF1Client:
@@ -152,7 +159,8 @@ def _source(http: httpx2.AsyncClient, settings: Settings, clock: Clock) -> OpenF
 def _summary(report: IngestionReport) -> str:
     return (
         f"ingested {report.sessions} sessions: {report.requests} requests, "
-        f"{report.fetched} fetched, {report.already_stored} already stored"
+        f"{report.fetched} fetched, {report.already_stored} already stored, "
+        f"{report.deleted} deleted"
     )
 
 

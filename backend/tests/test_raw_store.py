@@ -5,7 +5,12 @@ from uuid import uuid4
 import pytest
 from pymongo import AsyncMongoClient
 
-from f1_strategy.adapters.raw_store import COLLECTION, MongoDocument, MongoRawStore
+from f1_strategy.adapters.raw_store import (
+    COLLECTION,
+    ENDPOINT_SESSION_INDEX,
+    MongoDocument,
+    MongoRawStore,
+)
 from f1_strategy.domain.openf1 import (
     Endpoint,
     JsonObject,
@@ -120,3 +125,43 @@ async def test_stored_rows_that_are_not_objects_fail_loud(
 
     with pytest.raises(TypeError, match=r"stored rows of laps\?session_key=9472"):
         await MongoRawStore(mongo, database).rows(LAPS)
+
+
+def telemetry(endpoint: Endpoint, session_key: int) -> RawRequest:
+    return RawRequest.of(endpoint, {Param.SESSION_KEY: session_key, Param.DRIVER_NUMBER: 1})
+
+
+@pytest.mark.anyio
+async def test_deleting_telemetry_keeps_the_given_session_and_every_other_endpoint(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+    kept = [
+        telemetry(Endpoint.CAR_DATA, 11396),
+        telemetry(Endpoint.LOCATION, 11396),
+        LAPS,
+        meetings_request(2024),
+    ]
+    deleted = [telemetry(Endpoint.CAR_DATA, 9472), telemetry(Endpoint.LOCATION, 9472)]
+    for request in kept + deleted:
+        await store.put(RawResponse(request, [], FETCHED_AT))
+
+    deleted_count = await store.delete_telemetry_except(11396)
+
+    assert deleted_count == len(deleted)
+    remaining = await mongo[database][COLLECTION].distinct("_id")
+    assert sorted(remaining) == sorted(request.key for request in kept)
+
+
+@pytest.mark.anyio
+async def test_the_endpoint_and_session_index_is_created_once(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+
+    await store.ensure_indexes()
+    await store.ensure_indexes()
+
+    indexes = await mongo[database][COLLECTION].index_information()
+    assert indexes[ENDPOINT_SESSION_INDEX]["key"] == [("endpoint", 1), ("session_key", 1)]
+    assert sorted(indexes) == ["_id_", ENDPOINT_SESSION_INDEX]

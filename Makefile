@@ -55,5 +55,4 @@ ingest:
 	$(INGEST) season --year $(YEAR)
 
 ingest-telemetry:
-	$(if $(SESSION),,$(error SESSION is required, e.g. make ingest-telemetry SESSION=9472))
-	$(INGEST) telemetry --session-key $(SESSION)
+	$(INGEST) telemetry $(if $(SESSION),--session-key $(SESSION))

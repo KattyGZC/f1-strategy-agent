@@ -9,7 +9,8 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0003](0003-monorepo-with-continuous-deployment.md) | Monorepo with continuous deployment to production | Accepted |
 | [0004](0004-mongodb-as-raw-document-store.md) | MongoDB as the raw document store | Accepted |
 | [0005](0005-react-vite-typescript-frontend.md) | React, Vite and TypeScript for the frontend | Accepted |
-| [0006](0006-raw-data-scope.md) | Raw data scope: Race and Qualifying by season, telemetry by session | Accepted |
+| [0006](0006-raw-data-scope.md) | Raw data scope: Race and Qualifying by season, telemetry by session | Accepted; telemetry superseded by 0007 |
+| [0007](0007-telemetry-of-the-latest-grand-prix.md) | Telemetry of the latest settled Grand Prix, one session kept | Accepted |
 
 ## Template
 

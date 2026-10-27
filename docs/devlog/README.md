@@ -11,6 +11,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-10-26 | [01. Audit of the first MVP and agent setup](2026-10-26-01-audit-and-agent-setup.md) |
 | 2026-10-26 | [02. Phase 0: foundation](2026-10-26-02-phase-0-foundation.md) |
 | 2026-10-26 | [03. Phase 1: ingestion](2026-10-26-03-phase-1-ingestion.md) |
+| 2026-10-27 | [01. Telemetry of the latest Grand Prix](2026-10-27-01-latest-grand-prix-telemetry.md) |
 
 ## Template
 

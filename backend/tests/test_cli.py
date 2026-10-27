@@ -32,6 +32,8 @@ def openf1(request: httpx2.Request) -> httpx2.Response:
     params = dict(request.url.params)
     if endpoint == "sessions" and params.get("year") == "2024":
         return httpx2.Response(200, json=SEASON_2024)
+    if endpoint == "sessions" and params.get("session_name") == "Race":
+        return httpx2.Response(200, json=[session_row(9472, "Race")])
     if endpoint == "sessions" and params == {"session_key": "9472"}:
         return httpx2.Response(200, json=[session_row(9472, "Race")])
     if endpoint == "drivers":
@@ -68,8 +70,8 @@ def test_season_ingests_the_chosen_session_type_then_resumes_with_nothing_to_fet
 
     assert exit_codes == [0, 0]
     assert capsys.readouterr().out.splitlines() == [
-        "ingested 1 sessions: 13 requests, 13 fetched, 0 already stored",
-        "ingested 1 sessions: 13 requests, 0 fetched, 13 already stored",
+        "ingested 1 sessions: 13 requests, 13 fetched, 0 already stored, 0 deleted",
+        "ingested 1 sessions: 13 requests, 0 fetched, 13 already stored, 0 deleted",
     ]
     assert len(stored_keys(mongo_uri, database)) == 2 + 11
 
@@ -131,9 +133,24 @@ def test_telemetry_ingests_one_session(
     assert exit_code == 0
     assert capsys.readouterr().out == (
         f"ingested 1 sessions: {TELEMETRY_REQUESTS} requests, "
-        f"{TELEMETRY_REQUESTS} fetched, 0 already stored\n"
+        f"{TELEMETRY_REQUESTS} fetched, 0 already stored, 0 deleted\n"
     )
     assert len(stored_keys(mongo_uri, database)) == TELEMETRY_REQUESTS
+
+
+def test_telemetry_without_a_session_ingests_the_latest_grand_prix(
+    mongo_uri: str, database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = run(["telemetry"])
+
+    stored = stored_keys(mongo_uri, database)
+    assert exit_code == 0
+    assert capsys.readouterr().out == (
+        f"ingested 1 sessions: {TELEMETRY_REQUESTS} requests, "
+        f"{TELEMETRY_REQUESTS} fetched, 0 already stored, 0 deleted\n"
+    )
+    assert "sessions?date_end<2025-01-31T18%3A00%3A00%2B00%3A00&session_name=Race" in stored
+    assert sum(key.startswith("car_data?") and "session_key=9472" in key for key in stored) == 8
 
 
 def test_missing_configuration_fails_before_any_request(

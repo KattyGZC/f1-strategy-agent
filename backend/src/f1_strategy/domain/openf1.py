@@ -34,9 +34,14 @@ class SessionType(StrEnum):
     RACE = "Race"
 
 
+class SessionName(StrEnum):
+    GRAND_PRIX = "Race"
+
+
 class Param(StrEnum):
     YEAR = "year"
     SESSION_KEY = "session_key"
+    SESSION_NAME = "session_name"
     DRIVER_NUMBER = "driver_number"
     DATE_FROM = "date>="
     DATE_BEFORE = "date<"
@@ -145,15 +150,41 @@ def meetings_request(year: int) -> RawRequest:
     return RawRequest.of(Endpoint.MEETINGS, {Param.YEAR: year})
 
 
+def settled_cutoff(now: datetime, settle_time: timedelta) -> datetime:
+    return _hour_start(now - settle_time)
+
+
 def season_cutoff(year: int, now: datetime, settle_time: timedelta) -> datetime:
     season_end = datetime(year + 1, 1, 1, tzinfo=UTC)
-    return min(now - settle_time, season_end).replace(minute=0, second=0, microsecond=0)
+    return min(settled_cutoff(now, settle_time), season_end)
+
+
+def _hour_start(instant: datetime) -> datetime:
+    return instant.replace(minute=0, second=0, microsecond=0)
 
 
 def season_sessions_request(year: int, cutoff: datetime) -> RawRequest:
     return RawRequest.of(
         Endpoint.SESSIONS, {Param.YEAR: year, Param.DATE_END_BEFORE: cutoff.isoformat()}
     )
+
+
+def grand_prix_request(cutoff: datetime) -> RawRequest:
+    return RawRequest.of(
+        Endpoint.SESSIONS,
+        {Param.SESSION_NAME: SessionName.GRAND_PRIX, Param.DATE_END_BEFORE: cutoff.isoformat()},
+    )
+
+
+def latest_race(sessions: Sequence[Session], cutoff: datetime) -> Session | None:
+    settled = [
+        session
+        for session in sessions
+        if session.session_type == SessionType.RACE
+        and not session.is_cancelled
+        and session.date_end < cutoff
+    ]
+    return max(settled, key=lambda session: (session.date_end, session.session_key), default=None)
 
 
 def session_request(session_key: int) -> RawRequest:

@@ -11,6 +11,8 @@ from f1_strategy.domain.openf1 import (
     Session,
     SessionType,
     drivers_request,
+    grand_prix_request,
+    latest_race,
     meetings_request,
     parse_driver_numbers,
     parse_sessions,
@@ -18,6 +20,7 @@ from f1_strategy.domain.openf1 import (
     season_sessions_request,
     session_request,
     session_requests,
+    settled_cutoff,
     telemetry_requests,
 )
 from tests.factories import DRIVERS, RACE_END, RACE_KEY, RACE_START, session_row
@@ -68,6 +71,9 @@ def test_index_requests() -> None:
     )
     assert session_request(RACE_KEY).key == "sessions?session_key=9472"
     assert drivers_request(RACE_KEY).key == "drivers?session_key=9472"
+    assert grand_prix_request(datetime(2026, 10, 26, 16, tzinfo=UTC)).key == (
+        "sessions?date_end<2026-10-26T16%3A00%3A00%2B00%3A00&session_name=Race"
+    )
 
 
 def test_session_key_is_read_from_params() -> None:
@@ -102,6 +108,72 @@ def test_a_future_season_is_cut_before_anything_settled() -> None:
     now = datetime(2026, 10, 27, 3, tzinfo=UTC)
 
     assert season_cutoff(2027, now, SETTLE) == datetime(2026, 10, 26, 21, tzinfo=UTC)
+
+
+def test_the_settled_cutoff_is_the_settle_time_ago_truncated_to_the_hour() -> None:
+    now = datetime(2026, 10, 27, 3, 28, 3, 123, tzinfo=UTC)
+
+    assert settled_cutoff(now, SETTLE) == datetime(2026, 10, 26, 21, tzinfo=UTC)
+
+
+def grand_prix(
+    session_key: int,
+    date_end: datetime,
+    *,
+    session_type: SessionType = SessionType.RACE,
+    is_cancelled: bool = False,
+) -> Session:
+    return Session(
+        session_key=session_key,
+        session_type=session_type,
+        date_start=date_end - timedelta(hours=2),
+        date_end=date_end,
+        is_cancelled=is_cancelled,
+    )
+
+
+OCTOBER_11 = datetime(2026, 10, 11, 14, tzinfo=UTC)
+OCTOBER_25 = datetime(2026, 10, 25, 22, tzinfo=UTC)
+CUTOFF = datetime(2026, 10, 26, 16, tzinfo=UTC)
+
+
+def test_the_latest_race_is_the_one_that_ended_last() -> None:
+    races = [grand_prix(11396, OCTOBER_25), grand_prix(11388, OCTOBER_11)]
+
+    assert latest_race(races, CUTOFF) == grand_prix(11396, OCTOBER_25)
+
+
+def test_the_latest_race_skips_a_cancelled_race() -> None:
+    races = [grand_prix(11388, OCTOBER_11), grand_prix(11396, OCTOBER_25, is_cancelled=True)]
+
+    assert latest_race(races, CUTOFF) == grand_prix(11388, OCTOBER_11)
+
+
+def test_the_latest_race_skips_a_race_ending_at_the_cutoff() -> None:
+    races = [grand_prix(11388, OCTOBER_11), grand_prix(11396, CUTOFF)]
+
+    assert latest_race(races, CUTOFF) == grand_prix(11388, OCTOBER_11)
+
+
+def test_the_latest_race_skips_a_session_that_is_not_a_race() -> None:
+    races = [
+        grand_prix(11388, OCTOBER_11),
+        grand_prix(11395, OCTOBER_25, session_type=SessionType.QUALIFYING),
+    ]
+
+    assert latest_race(races, CUTOFF) == grand_prix(11388, OCTOBER_11)
+
+
+def test_races_ending_together_are_broken_by_the_higher_session_key() -> None:
+    races = [grand_prix(11397, OCTOBER_25), grand_prix(11396, OCTOBER_25)]
+
+    assert latest_race(races, CUTOFF) == grand_prix(11397, OCTOBER_25)
+    assert latest_race(list(reversed(races)), CUTOFF) == grand_prix(11397, OCTOBER_25)
+
+
+def test_there_is_no_latest_race_before_the_first_settles() -> None:
+    assert latest_race([], CUTOFF) is None
+    assert latest_race([grand_prix(11396, OCTOBER_25)], OCTOBER_11) is None
 
 
 def test_a_session_settles_its_settle_time_after_it_ends() -> None:
