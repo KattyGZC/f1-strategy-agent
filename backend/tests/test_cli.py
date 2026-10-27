@@ -12,6 +12,8 @@ from f1_strategy.adapters.raw_store import COLLECTION
 from tests.factories import DRIVERS, RACE_END, SEASON_2024, SEASON_2024_SETTLED, session_row
 
 SETTINGS = {
+    "POSTGRES_URI": "postgresql://unused",
+    "POSTGRES_CONNECT_TIMEOUT_S": "10",
     "OPENF1_BASE_URL": "https://openf1.test/v1",
     "OPENF1_REQUESTS_PER_SECOND": "1000",
     "OPENF1_REQUESTS_PER_MINUTE": "1000",

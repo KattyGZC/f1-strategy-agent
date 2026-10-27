@@ -2,7 +2,12 @@ from pydantic import Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings):
+class PostgresSettings(BaseSettings):
+    postgres_uri: SecretStr
+    postgres_connect_timeout_s: int = Field(gt=0)
+
+
+class Settings(PostgresSettings):
     mongo_uri: SecretStr
     mongo_database: str = Field(min_length=1)
     openf1_base_url: HttpUrl
