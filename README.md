@@ -29,7 +29,7 @@ cp .env.example .env
 make up
 ```
 
-Open http://localhost:8080. `make down` stops the stack.
+Open http://localhost:8080. `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` line from `.env.example`.
 
 Ingest raw data while the stack is up:
 

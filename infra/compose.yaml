@@ -35,6 +35,8 @@ services:
   backend:
     build: ../backend
     environment:
+      POSTGRES_URI: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      POSTGRES_CONNECT_TIMEOUT_S: ${POSTGRES_CONNECT_TIMEOUT_S:?}
       MONGO_URI: mongodb://${MONGO_ROOT_USER:?}:${MONGO_ROOT_PASSWORD:?}@mongo:27017/?authSource=admin
       MONGO_DATABASE: ${MONGO_DATABASE:?}
       OPENF1_BASE_URL: ${OPENF1_BASE_URL:?}
@@ -47,6 +49,8 @@ services:
       SESSION_SETTLE_H: ${SESSION_SETTLE_H:?}
       TELEMETRY_WINDOW_MIN: ${TELEMETRY_WINDOW_MIN:?}
     depends_on:
+      postgres:
+        condition: service_healthy
       mongo:
         condition: service_healthy
     ports:
