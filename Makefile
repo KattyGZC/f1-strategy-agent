@@ -1,7 +1,8 @@
 COMPOSE := docker compose --env-file .env -f infra/compose.yaml
 OPENAPI_TMP := .openapi-check
+INGEST := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
 
-.PHONY: install check backend-check frontend-check openapi openapi-check format up down logs
+.PHONY: install check backend-check frontend-check openapi openapi-check format up down logs ingest ingest-telemetry
 
 install:
 	cd backend && uv sync --locked
@@ -48,3 +49,11 @@ down:
 
 logs:
 	$(COMPOSE) logs --follow
+
+ingest:
+	$(if $(YEAR),,$(error YEAR is required, e.g. make ingest YEAR=2024))
+	$(INGEST) season --year $(YEAR)
+
+ingest-telemetry:
+	$(if $(SESSION),,$(error SESSION is required, e.g. make ingest-telemetry SESSION=9472))
+	$(INGEST) telemetry --session-key $(SESSION)

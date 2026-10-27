@@ -13,7 +13,12 @@ Fase 0, la base:
 - **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, el backend y el frontend. Las bases de datos corren, pero todavía nada lee ni escribe en ellas.
 - **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API y una prueba de humo del stack completo.
 
-La ingesta, el simulador y el asistente todavía no existen.
+Fase 1, la ingesta:
+
+- **Datos crudos de OpenF1 en MongoDB**: cada respuesta de las sesiones de carrera y clasificación de una temporada, un documento por petición, identificado por el endpoint y sus parámetros. Una sesión se ingiere cuando terminó hace al menos `SESSION_SETTLE_H` horas (6 por defecto), así que también funciona con la temporada en curso: lánzalo de nuevo tras un fin de semana de carrera y añade solo las sesiones nuevas. El cliente respeta el límite gratuito de OpenF1 (3 peticiones por segundo, 30 por minuto) y solo reintenta los errores que pueden salir bien al repetir.
+- **Telemetría del coche** (`car_data`, `location`) de una sesión cada vez, por piloto en ventanas de 30 minutos. La de una temporada entera no cabría en el plan gratuito de MongoDB ([ADR 0006](docs/adr/0006-raw-data-scope.md)).
+
+El modelo limpio, el replay, el simulador y el asistente todavía no existen.
 
 ## Ejecutarlo en local
 
@@ -25,6 +30,15 @@ make up
 ```
 
 Abre http://localhost:8080. `make down` detiene el stack.
+
+Con el stack levantado, ingiere datos crudos:
+
+```sh
+make ingest YEAR=2026              # sesiones de carrera y clasificación asentadas, unos 20 minutos por temporada completa
+make ingest-telemetry SESSION=9472 # car_data y location de una sesión (carrera de Baréin 2024)
+```
+
+Si una ejecución falla, termina con código 1 y una línea que dice qué petición falló. Vuelve a lanzar el mismo comando: lo ya guardado se salta y la ejecución sigue desde ahí.
 
 ## Desarrollo
 

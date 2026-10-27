@@ -6,7 +6,9 @@ authors = [{ name = "KattyGZC" }]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.162.0",
+    "httpx2>=2.16.0",
     "pydantic-settings>=2.16.1",
+    "pymongo>=4.15",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -59,10 +61,10 @@ layers = [
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.16.0",
     "import-linter>=2.15",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.2",
+    "testcontainers[mongodb]>=4.13",
 ]
