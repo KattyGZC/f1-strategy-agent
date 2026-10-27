@@ -20,10 +20,10 @@ Done:
 
 0. **Foundation.** Monorepo layout, tooling, `make check`, CI, containers. The backend serves `GET /api/health` and the frontend shows it through the generated client.
 1. **Ingestion.** `make ingest YEAR=...` stores every OpenF1 response of a season's settled Race and Qualifying sessions in MongoDB, one document per request, within the free rate limit, the season in progress included; a rerun resumes and fetches only what is missing or newly settled. `make ingest-telemetry` does the same for the car telemetry of the latest settled Grand Prix (or `SESSION=...`) and keeps the telemetry of that session only. Scope and size: ADR 0006 and ADR 0007.
+2. **Clean model.** `make transform YEAR=...` loads every ingested session of a season into a normalized PostgreSQL schema (drivers per session, laps, stints, pits, intervals, positions, race control, weather, results, qualifying phases, starting grid, overtakes, team radio), typed numbers and closed sets as enums. A reconciling sweep: each session is a pure transform of its raw documents, replaced whole in one transaction, claimed with `SKIP LOCKED`, skipped while its input and `TRANSFORM_VERSION` are unchanged; transient errors are retried, bad data fails its session alone. Alembic migrations run on `make up` and on deploy. Decisions: ADR 0008.
 
 Next, in order. Each phase is planned in the session that starts it and recorded in the devlog.
 
-2. **Clean model.** Normalized PostgreSQL schema per season (drivers per session, stints, compounds, weather, race control, results), migrations, typed numbers.
 3. **Replay.** A session replayed at 1x/Nx through a queue to consumers and to the browser.
 4. **Predictive engine.** Degradation and lap-time model, calibrated on stints, with golden cases from real races.
 5. **Simulator API and UI.**

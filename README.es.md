@@ -10,7 +10,7 @@ Fase 0, la base:
 
 - **Backend** (`backend/`): Python 3.12, FastAPI, un endpoint, `GET /api/health`. En capas: dominio, aplicación y adaptadores; `import-linter` rompe el build si una capa interna importa una externa.
 - **Frontend** (`frontend/`): React, Vite y TypeScript en modo estricto. Muestra el estado de la API mediante un cliente generado a partir del esquema OpenAPI del backend.
-- **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, el backend y el frontend. Las bases de datos corren, pero todavía nada lee ni escribe en ellas.
+- **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, el backend y el frontend.
 - **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API y una prueba de humo del stack completo.
 
 Fase 1, la ingesta:
@@ -18,7 +18,12 @@ Fase 1, la ingesta:
 - **Datos crudos de OpenF1 en MongoDB**: cada respuesta de las sesiones de carrera y clasificación de una temporada, un documento por petición, identificado por el endpoint y sus parámetros. Una sesión se ingiere cuando terminó hace al menos `SESSION_SETTLE_H` horas (6 por defecto), así que también funciona con la temporada en curso: lánzalo de nuevo tras un fin de semana de carrera y añade solo las sesiones nuevas. El cliente respeta el límite gratuito de OpenF1 (3 peticiones por segundo, 30 por minuto) y solo reintenta los errores que pueden salir bien al repetir.
 - **Telemetría del coche** (`car_data`, `location`) del último Gran Premio asentado, por piloto en ventanas de 30 minutos. Solo se guarda la telemetría de una sesión: cuando una nueva queda guardada completa, se borra la anterior, porque cada carrera pesa unos 150 MB y el plan gratuito de MongoDB tiene 512 MB ([ADR 0007](docs/adr/0007-telemetry-of-the-latest-grand-prix.md)).
 
-El modelo limpio, el replay, el simulador y el asistente todavía no existen.
+Fase 2, el modelo limpio:
+
+- **Tablas tipadas en PostgreSQL** para cada sesión ingerida: meetings, sesiones, pilotos por sesión, vueltas, stints, paradas, intervalos, posiciones, control de carrera, clima, resultados, fases de clasificación, parrilla de salida, adelantamientos y radio del equipo. Los tiempos y gaps son números exactos, un gap de "+1 LAP" es un número de vueltas, los conjuntos cerrados son enums y las restricciones rechazan lo que la temporada 2024 no mostró ([ADR 0008](docs/adr/0008-deterministic-clean-model.md)).
+- **Una carga determinista**: los mismos datos crudos dan las mismas filas, sin importar el orden, el número de workers o una caída a mitad. Cada sesión se reemplaza entera en una transacción, volver a lanzarlo carga solo lo que cambió, y una sesión con datos malos falla sola, con el documento y la fila que la causaron.
+
+El replay, el simulador y el asistente todavía no existen.
 
 ## Ejecutarlo en local
 
