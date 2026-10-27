@@ -35,7 +35,10 @@ class SessionType(StrEnum):
 
 
 class SessionName(StrEnum):
+    QUALIFYING = "Qualifying"
+    SPRINT_QUALIFYING = "Sprint Qualifying"
     GRAND_PRIX = "Race"
+    SPRINT = "Sprint"
 
 
 class Param(StrEnum):
