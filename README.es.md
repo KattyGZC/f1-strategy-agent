@@ -15,7 +15,7 @@ Fase 0, la base:
 
 Fase 1, la ingesta:
 
-- **Datos crudos de OpenF1 en MongoDB**: cada respuesta de las sesiones de carrera y clasificación de una temporada terminada, un documento por petición, identificado por el endpoint y sus parámetros. El cliente respeta el límite gratuito de OpenF1 (3 peticiones por segundo, 30 por minuto) y solo reintenta los errores que pueden salir bien al repetir.
+- **Datos crudos de OpenF1 en MongoDB**: cada respuesta de las sesiones de carrera y clasificación de una temporada, un documento por petición, identificado por el endpoint y sus parámetros. Una sesión se ingiere cuando terminó hace al menos `SESSION_SETTLE_H` horas (6 por defecto), así que también funciona con la temporada en curso: lánzalo de nuevo tras un fin de semana de carrera y añade solo las sesiones nuevas. El cliente respeta el límite gratuito de OpenF1 (3 peticiones por segundo, 30 por minuto) y solo reintenta los errores que pueden salir bien al repetir.
 - **Telemetría del coche** (`car_data`, `location`) de una sesión cada vez, por piloto en ventanas de 30 minutos. La de una temporada entera no cabría en el plan gratuito de MongoDB ([ADR 0006](docs/adr/0006-raw-data-scope.md)).
 
 El modelo limpio, el replay, el simulador y el asistente todavía no existen.
@@ -34,7 +34,7 @@ Abre http://localhost:8080. `make down` detiene el stack.
 Con el stack levantado, ingiere datos crudos:
 
 ```sh
-make ingest YEAR=2024              # sesiones de carrera y clasificación, unos 20 minutos por temporada
+make ingest YEAR=2026              # sesiones de carrera y clasificación asentadas, unos 20 minutos por temporada completa
 make ingest-telemetry SESSION=9472 # car_data y location de una sesión (carrera de Baréin 2024)
 ```
 
