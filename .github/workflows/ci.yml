@@ -44,7 +44,13 @@ jobs:
   backend:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
+    # mongod 8 refuses to start on kernels 6.19 to 7.0.13 (jira.mongodb.org/browse/SERVER-121912),
+    # and ubuntu-24.04 images from 20261018 run 7.0.0. Back to ubuntu-latest once mongo:8 starts there.
+    runs-on: ubuntu-22.04
+    env:
+      # The runner is thrown away after the job, and keeping a container that failed to start
+      # is what lets the next step print its logs.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
@@ -53,6 +59,17 @@ jobs:
           working-directory: backend
       - run: cd backend && uv sync --locked
       - run: make backend-check
+      - if: failure()
+        name: Containers started by the tests
+        run: |
+          uname -r
+          docker version --format 'docker {{.Server.Version}}'
+          docker ps --all --no-trunc
+          for container in $(docker ps --all --quiet); do
+            echo "::group::$(docker inspect --format '{{.Config.Image}} {{.State.Status}} exit {{.State.ExitCode}}' "$container")"
+            docker logs "$container" 2>&1 | tail -n 100
+            echo "::endgroup::"
+          done
 
   frontend:
     needs: changes
@@ -89,7 +106,9 @@ jobs:
   stack:
     needs: changes
     if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    # mongod 8 refuses to start on kernels 6.19 to 7.0.13 (jira.mongodb.org/browse/SERVER-121912),
+    # and ubuntu-24.04 images from 20261018 run 7.0.0. Back to ubuntu-latest once mongo:8 starts there.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
       - run: cp .env.example .env
