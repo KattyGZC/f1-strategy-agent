@@ -34,6 +34,20 @@ services:
 
   backend:
     build: ../backend
+    environment:
+      MONGO_URI: mongodb://${MONGO_ROOT_USER:?}:${MONGO_ROOT_PASSWORD:?}@mongo:27017/?authSource=admin
+      MONGO_DATABASE: ${MONGO_DATABASE:?}
+      OPENF1_BASE_URL: ${OPENF1_BASE_URL:?}
+      OPENF1_REQUESTS_PER_SECOND: ${OPENF1_REQUESTS_PER_SECOND:?}
+      OPENF1_REQUESTS_PER_MINUTE: ${OPENF1_REQUESTS_PER_MINUTE:?}
+      OPENF1_MAX_CONCURRENCY: ${OPENF1_MAX_CONCURRENCY:?}
+      OPENF1_MAX_ATTEMPTS: ${OPENF1_MAX_ATTEMPTS:?}
+      OPENF1_BACKOFF_BASE_S: ${OPENF1_BACKOFF_BASE_S:?}
+      OPENF1_TIMEOUT_S: ${OPENF1_TIMEOUT_S:?}
+      TELEMETRY_WINDOW_MIN: ${TELEMETRY_WINDOW_MIN:?}
+    depends_on:
+      mongo:
+        condition: service_healthy
     ports:
       - "8000:8000"
     healthcheck:
