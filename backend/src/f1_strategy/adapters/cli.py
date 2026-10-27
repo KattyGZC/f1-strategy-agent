@@ -17,9 +17,8 @@ from f1_strategy.application.ingestion import (
     IngestSessionTelemetry,
     RawSource,
     RawStore,
-    SeasonNotFinishedError,
-    SessionNotEndedError,
     SessionNotFoundError,
+    SessionNotSettledError,
 )
 from f1_strategy.domain.openf1 import OpenF1PayloadError, SessionType
 
@@ -29,9 +28,8 @@ DEFAULT_SESSION_TYPES = (SessionType.RACE, SessionType.QUALIFYING)
 EXPECTED_FAILURES = (
     OpenF1Error,
     OpenF1PayloadError,
-    SeasonNotFinishedError,
-    SessionNotEndedError,
     SessionNotFoundError,
+    SessionNotSettledError,
 )
 
 type Clock = Callable[[], datetime]
@@ -62,7 +60,7 @@ def main(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="f1-ingest", description="Ingest raw OpenF1 data")
     commands = parser.add_subparsers(required=True)
-    season = commands.add_parser("season", help="every session of a finished season")
+    season = commands.add_parser("season", help="every settled session of a season")
     season.add_argument("--year", type=int, required=True)
     season.add_argument(
         "--session-type",
@@ -109,7 +107,12 @@ async def _ingest_season(
     settings: Settings,
     now: datetime,
 ) -> IngestionReport:
-    ingest_season = IngestSeason(source, store, settings.openf1_max_concurrency)
+    ingest_season = IngestSeason(
+        source,
+        store,
+        settings.openf1_max_concurrency,
+        timedelta(hours=settings.session_settle_h),
+    )
     session_types = args.session_types or DEFAULT_SESSION_TYPES
     return await ingest_season(args.year, frozenset(session_types), now)
 
@@ -125,6 +128,7 @@ async def _ingest_telemetry(
         source,
         store,
         settings.openf1_max_concurrency,
+        timedelta(hours=settings.session_settle_h),
         timedelta(minutes=settings.telemetry_window_min),
     )
     return await ingest_telemetry(args.session_key, now)

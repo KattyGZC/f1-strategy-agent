@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from urllib.parse import unquote
 from uuid import uuid4
 
 import httpx2
@@ -8,7 +9,7 @@ from pymongo import MongoClient
 
 from f1_strategy.adapters.cli import main
 from f1_strategy.adapters.raw_store import COLLECTION
-from tests.factories import AFTER_2024, DRIVERS, SEASON_2024, session_row
+from tests.factories import DRIVERS, RACE_END, SEASON_2024, SEASON_2024_SETTLED, session_row
 
 SETTINGS = {
     "OPENF1_BASE_URL": "https://openf1.test/v1",
@@ -18,6 +19,7 @@ SETTINGS = {
     "OPENF1_MAX_ATTEMPTS": "1",
     "OPENF1_BACKOFF_BASE_S": "0.01",
     "OPENF1_TIMEOUT_S": "5",
+    "SESSION_SETTLE_H": "6",
     "TELEMETRY_WINDOW_MIN": "30",
 }
 NO_RESULTS = {"detail": "No results found."}
@@ -28,7 +30,7 @@ TELEMETRY_REQUESTS = 2 + 2 * 2 * 4
 def openf1(request: httpx2.Request) -> httpx2.Response:
     endpoint = request.url.path.removeprefix("/v1/")
     params = dict(request.url.params)
-    if endpoint == "sessions" and params == {"year": "2024"}:
+    if endpoint == "sessions" and params.get("year") == "2024":
         return httpx2.Response(200, json=SEASON_2024)
     if endpoint == "sessions" and params == {"session_key": "9472"}:
         return httpx2.Response(200, json=[session_row(9472, "Race")])
@@ -39,7 +41,7 @@ def openf1(request: httpx2.Request) -> httpx2.Response:
     return httpx2.Response(404, json=NO_RESULTS)
 
 
-def run(argv: list[str], clock: datetime = AFTER_2024) -> int:
+def run(argv: list[str], clock: datetime = SEASON_2024_SETTLED) -> int:
     return main(argv, transport=httpx2.MockTransport(openf1), clock=lambda: clock)
 
 
@@ -85,28 +87,40 @@ def test_season_fails_with_one_line_naming_the_request_and_keeps_what_was_stored
     )
     stored = stored_keys(mongo_uri, database)
     assert "laps?session_key=9468" not in stored
-    assert {"meetings?year=2024", "sessions?year=2024"} <= stored
+    assert {
+        "meetings?year=2024",
+        "sessions?date_end<2025-01-01T00%3A00%3A00%2B00%3A00&year=2024",
+    } <= stored
     assert len(stored) < SEASON_REQUESTS
 
 
-def test_an_unfinished_season_exits_1(database: str, capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = run(["season", "--year", "2024"], clock=datetime(2024, 11, 1, tzinfo=UTC))
+def test_telemetry_of_a_session_that_has_not_settled_exits_1(
+    database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = run(["telemetry", "--session-key", "9472"], clock=RACE_END)
 
     assert exit_code == 1
     assert capsys.readouterr().err == (
-        "ingestion failed: season 2024 is not finished; only seasons before 2024 are ingested\n"
+        "ingestion failed: session 9472 ends at 2024-03-02T17:00:00+00:00; "
+        "it can be ingested from 2024-03-02T23:00:00+00:00\n"
     )
 
 
-def test_the_default_clock_is_the_current_utc_year(
-    database: str, capsys: pytest.CaptureFixture[str]
+def test_the_default_clock_cuts_the_current_season_at_the_settle_time(
+    mongo_uri: str, database: str
 ) -> None:
     current_year = datetime.now(UTC).year
 
-    exit_code = main(["season", "--year", str(current_year)])
+    exit_code = main(
+        ["season", "--year", str(current_year)], transport=httpx2.MockTransport(openf1)
+    )
 
-    assert exit_code == 1
-    assert f"season {current_year} is not finished" in capsys.readouterr().err
+    index_keys = [key for key in stored_keys(mongo_uri, database) if key.startswith("sessions?")]
+    assert exit_code == 0
+    assert len(index_keys) == 1
+    cutoff = datetime.fromisoformat(unquote(index_keys[0].split("date_end<")[1].split("&")[0]))
+    expected = datetime.now(UTC) - timedelta(hours=6)
+    assert timedelta(0) <= expected - cutoff < timedelta(hours=1)
 
 
 def test_telemetry_ingests_one_session(
