@@ -8,6 +8,7 @@ from psycopg.errors import CheckViolation
 from f1_strategy.adapters.migrate import main, upgrade
 from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
 
+HEAD = "0002"
 NOW = datetime(2026, 10, 27, 12, tzinfo=UTC)
 LOADED = {
     "loaded_fingerprint": "in-1",
@@ -51,7 +52,7 @@ def insert_run(postgres_uri: str, **overrides: object) -> None:
 def test_upgrade_brings_an_empty_database_to_the_latest_migration(postgres_uri: str) -> None:
     upgrade(postgres_uri, CONNECT_TIMEOUT_S)
 
-    assert schema_version(postgres_uri) == ["0001"]
+    assert schema_version(postgres_uri) == [HEAD]
 
 
 def test_a_second_upgrade_changes_nothing(postgres_uri: str) -> None:
@@ -60,7 +61,7 @@ def test_a_second_upgrade_changes_nothing(postgres_uri: str) -> None:
 
     upgrade(postgres_uri, CONNECT_TIMEOUT_S)
 
-    assert schema_version(postgres_uri) == ["0001"]
+    assert schema_version(postgres_uri) == [HEAD]
     with psycopg.connect(postgres_uri, connect_timeout=CONNECT_TIMEOUT_S) as connection:
         assert connection.execute("SELECT count(*) FROM transform_run").fetchone() == (1,)
 
@@ -70,7 +71,7 @@ def test_concurrent_upgrades_from_two_processes_both_succeed(postgres_uri: str) 
         for future in [pool.submit(upgrade, postgres_uri, CONNECT_TIMEOUT_S) for _ in range(2)]:
             future.result()
 
-    assert schema_version(postgres_uri) == ["0001"]
+    assert schema_version(postgres_uri) == [HEAD]
 
 
 def test_main_migrates_the_database_named_by_the_environment(
@@ -80,7 +81,7 @@ def test_main_migrates_the_database_named_by_the_environment(
     monkeypatch.setenv("POSTGRES_CONNECT_TIMEOUT_S", str(CONNECT_TIMEOUT_S))
 
     assert main() == 0
-    assert schema_version(postgres_uri) == ["0001"]
+    assert schema_version(postgres_uri) == [HEAD]
 
 
 @pytest.mark.parametrize(
