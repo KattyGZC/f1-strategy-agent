@@ -1,6 +1,6 @@
 # 0006. Raw data scope: settled Race and Qualifying sessions by season, telemetry by session
 
-- Status: Accepted
+- Status: Accepted. The telemetry scope is superseded by [0007](0007-telemetry-of-the-latest-grand-prix.md)
 - Date: 2026-10-26
 
 ## Context

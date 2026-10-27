@@ -19,7 +19,7 @@ Rebuild in progress. The first MVP (February 2026) was removed in phase 0; it st
 Done:
 
 0. **Foundation.** Monorepo layout, tooling, `make check`, CI, containers. The backend serves `GET /api/health` and the frontend shows it through the generated client.
-1. **Ingestion.** `make ingest YEAR=...` stores every OpenF1 response of a season's settled Race and Qualifying sessions in MongoDB, one document per request, within the free rate limit, the season in progress included; a rerun resumes and fetches only what is missing or newly settled. `make ingest-telemetry SESSION=...` does the same for the car telemetry of one session. Scope and size: ADR 0006.
+1. **Ingestion.** `make ingest YEAR=...` stores every OpenF1 response of a season's settled Race and Qualifying sessions in MongoDB, one document per request, within the free rate limit, the season in progress included; a rerun resumes and fetches only what is missing or newly settled. `make ingest-telemetry` does the same for the car telemetry of the latest settled Grand Prix (or `SESSION=...`) and keeps the telemetry of that session only. Scope and size: ADR 0006 and ADR 0007.
 
 Next, in order. Each phase is planned in the session that starts it and recorded in the devlog.
 
