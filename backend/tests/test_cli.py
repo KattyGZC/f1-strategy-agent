@@ -8,8 +8,20 @@ from pydantic import ValidationError
 from pymongo import MongoClient
 
 from f1_strategy.adapters.cli import main
+from f1_strategy.adapters.migrate import upgrade
 from f1_strategy.adapters.raw_store import COLLECTION
+from f1_strategy.domain.openf1 import (
+    Endpoint,
+    JsonObject,
+    Param,
+    RawRequest,
+    meetings_request,
+    season_cutoff,
+    season_sessions_request,
+)
 from tests.factories import DRIVERS, RACE_END, SEASON_2024, SEASON_2024_SETTLED, session_row
+from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
+from tests.samples import QUALIFYING, RACE, sample
 
 SETTINGS = {
     "POSTGRES_URI": "postgresql://unused",
@@ -23,6 +35,9 @@ SETTINGS = {
     "OPENF1_TIMEOUT_S": "5",
     "SESSION_SETTLE_H": "6",
     "TELEMETRY_WINDOW_MIN": "30",
+    "TRANSFORM_MAX_CONCURRENCY": "2",
+    "TRANSFORM_MAX_ATTEMPTS": "2",
+    "TRANSFORM_BACKOFF_BASE_S": "0.01",
 }
 NO_RESULTS = {"detail": "No results found."}
 SEASON_REQUESTS = 2 + 11 + 10
@@ -169,3 +184,81 @@ def test_an_unknown_session_type_is_rejected_by_the_parser(database: str) -> Non
         run(["season", "--year", "2024", "--session-type", "Sprint"])
 
     assert exit_info.value.code == 2
+
+
+CUTOFF_2024 = season_cutoff(2024, SEASON_2024_SETTLED, timedelta(hours=6))
+FETCHED_AT = datetime(2024, 3, 3, tzinfo=UTC)
+
+
+@pytest.fixture
+def clean_database(database: str, postgres_server_uri: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    postgres_uri = fresh_database(postgres_server_uri)
+    upgrade(postgres_uri, CONNECT_TIMEOUT_S)
+    monkeypatch.setenv("POSTGRES_URI", postgres_uri)
+    return database
+
+
+def store_raw(mongo_uri: str, database: str, *, broken_lap: bool = False) -> None:
+    """The raw store after ingesting 2024, holding the two sampled Bahrain sessions."""
+    race, qualifying = sample(RACE), sample(QUALIFYING)
+    if broken_lap:
+        race.rows[Endpoint.LAPS][0]["lap_number"] = "1"
+    documents: list[tuple[RawRequest, list[JsonObject]]] = [
+        (season_sessions_request(2024, CUTOFF_2024), [race.session, qualifying.session]),
+        (meetings_request(2024, CUTOFF_2024), [race.meeting]),
+    ]
+    for key, data in ((int(RACE), race), (int(QUALIFYING), qualifying)):
+        for endpoint, rows in data.rows.items():
+            documents.append((RawRequest.of(endpoint, {Param.SESSION_KEY: key}), rows))
+    with MongoClient[dict[str, object]](mongo_uri) as client:
+        client[database][COLLECTION].insert_many(
+            {"_id": request.key, "rows": rows, "fetched_at": FETCHED_AT}
+            for request, rows in documents
+        )
+
+
+def test_transform_loads_the_ingested_season_then_finds_nothing_to_do(
+    mongo_uri: str, clean_database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store_raw(mongo_uri, clean_database)
+
+    exit_codes = [run(["transform", "--year", "2024"]), run(["transform", "--year", "2024"])]
+
+    assert exit_codes == [0, 0]
+    assert capsys.readouterr().out.splitlines() == [
+        "transformed 2 sessions: 2 loaded, 0 unchanged, 0 waiting_raw, 0 still_failing, "
+        "0 failed, 0 busy",
+        "transformed 2 sessions: 0 loaded, 2 unchanged, 0 waiting_raw, 0 still_failing, "
+        "0 failed, 0 busy",
+    ]
+
+
+def test_transform_exits_1_naming_each_failed_session(
+    mongo_uri: str, clean_database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store_raw(mongo_uri, clean_database, broken_lap=True)
+
+    exit_code = run(["transform", "--year", "2024", "--session-type", "Race"])
+
+    output = capsys.readouterr()
+    assert exit_code == 1
+    assert output.out == (
+        "transformed 1 sessions: 0 loaded, 0 unchanged, 0 waiting_raw, 0 still_failing, "
+        "1 failed, 0 busy\n"
+    )
+    assert output.err == (
+        "session 9472 failed: laps?session_key=9472: laps row 0: "
+        "lap_number must be an integer, got '1'\n"
+    )
+
+
+def test_transform_of_a_season_not_ingested_exits_1(
+    clean_database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = run(["transform", "--year", "2024"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().err == (
+        f"transform failed: {season_sessions_request(2024, CUTOFF_2024).key} is not stored; "
+        "ingest the season with the same clock first\n"
+    )
