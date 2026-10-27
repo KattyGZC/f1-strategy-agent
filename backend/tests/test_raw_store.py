@@ -1,0 +1,122 @@
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from uuid import uuid4
+
+import pytest
+from pymongo import AsyncMongoClient
+
+from f1_strategy.adapters.raw_store import COLLECTION, MongoDocument, MongoRawStore
+from f1_strategy.domain.openf1 import (
+    Endpoint,
+    JsonObject,
+    Param,
+    RawRequest,
+    RawResponse,
+    meetings_request,
+)
+
+FETCHED_AT = datetime(2026, 10, 26, 12, tzinfo=UTC)
+LAPS = RawRequest.of(Endpoint.LAPS, {Param.SESSION_KEY: 9472})
+ROWS: list[JsonObject] = [
+    {"lap_number": 1, "lap_duration": 100.537, "segments_sector_1": [None, 2048]}
+]
+
+
+@pytest.fixture
+async def mongo(mongo_uri: str) -> AsyncIterator[AsyncMongoClient[MongoDocument]]:
+    client: AsyncMongoClient[MongoDocument] = AsyncMongoClient(mongo_uri, tz_aware=True)
+    async with client:
+        yield client
+
+
+@pytest.fixture
+def database() -> str:
+    return f"raw_{uuid4().hex}"
+
+
+@pytest.mark.anyio
+async def test_a_stored_response_is_found_with_its_rows(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+
+    await store.put(RawResponse(LAPS, ROWS, FETCHED_AT))
+
+    assert await store.contains(LAPS)
+    assert await store.rows(LAPS) == ROWS
+
+
+@pytest.mark.anyio
+async def test_the_document_is_keyed_by_the_request_and_keeps_its_provenance(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    await MongoRawStore(mongo, database).put(RawResponse(LAPS, ROWS, FETCHED_AT))
+
+    document = await mongo[database][COLLECTION].find_one({"_id": LAPS.key})
+
+    assert document == {
+        "_id": "laps?session_key=9472",
+        "endpoint": "laps",
+        "params": {"session_key": 9472},
+        "session_key": 9472,
+        "rows": ROWS,
+        "fetched_at": FETCHED_AT,
+    }
+
+
+@pytest.mark.anyio
+async def test_a_request_without_a_session_is_stored_with_a_null_session_key(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    await MongoRawStore(mongo, database).put(RawResponse(meetings_request(2024), [], FETCHED_AT))
+
+    document = await mongo[database][COLLECTION].find_one({"_id": "meetings?year=2024"})
+
+    assert document is not None
+    assert document["session_key"] is None
+    assert document["rows"] == []
+
+
+@pytest.mark.anyio
+async def test_an_unknown_request_is_absent(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+
+    assert not await store.contains(LAPS)
+    assert await store.rows(LAPS) is None
+
+
+@pytest.mark.anyio
+async def test_an_empty_response_is_stored_and_distinct_from_absent(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+
+    await store.put(RawResponse(LAPS, [], FETCHED_AT))
+
+    assert await store.contains(LAPS)
+    assert await store.rows(LAPS) == []
+
+
+@pytest.mark.anyio
+async def test_a_second_write_of_the_same_request_is_ignored_and_never_overwrites(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+    await store.put(RawResponse(LAPS, ROWS, FETCHED_AT))
+
+    await store.put(RawResponse(LAPS, [{"lap_number": 99}], datetime(2027, 1, 1, tzinfo=UTC)))
+
+    assert await store.rows(LAPS) == ROWS
+    assert await mongo[database][COLLECTION].count_documents({}) == 1
+
+
+@pytest.mark.anyio
+async def test_stored_rows_that_are_not_objects_fail_loud(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    await mongo[database][COLLECTION].insert_one({"_id": LAPS.key, "rows": ["lap"]})
+
+    with pytest.raises(TypeError, match=r"stored rows of laps\?session_key=9472"):
+        await MongoRawStore(mongo, database).rows(LAPS)
