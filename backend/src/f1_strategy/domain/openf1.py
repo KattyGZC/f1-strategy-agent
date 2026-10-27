@@ -45,12 +45,15 @@ class Param(StrEnum):
     DRIVER_NUMBER = "driver_number"
     DATE_FROM = "date>="
     DATE_BEFORE = "date<"
+    DATE_START_BEFORE = "date_start<"
     DATE_END_BEFORE = "date_end<"
 
 
 # OpenF1 decodes the whole query before reading operators, so a comparison is written
 # "date>=value"; "date>==value", which an encoded key=value pair turns into, is a 500 (2026-10-26).
-COMPARISON_PARAMS = frozenset({Param.DATE_FROM, Param.DATE_BEFORE, Param.DATE_END_BEFORE})
+COMPARISON_PARAMS = frozenset(
+    {Param.DATE_FROM, Param.DATE_BEFORE, Param.DATE_START_BEFORE, Param.DATE_END_BEFORE}
+)
 
 
 SESSION_ENDPOINTS: Mapping[SessionType, tuple[Endpoint, ...]] = {
@@ -146,8 +149,10 @@ class OpenF1PayloadError(ValueError):
     pass
 
 
-def meetings_request(year: int) -> RawRequest:
-    return RawRequest.of(Endpoint.MEETINGS, {Param.YEAR: year})
+def meetings_request(year: int, cutoff: datetime) -> RawRequest:
+    return RawRequest.of(
+        Endpoint.MEETINGS, {Param.YEAR: year, Param.DATE_START_BEFORE: cutoff.isoformat()}
+    )
 
 
 def settled_cutoff(now: datetime, settle_time: timedelta) -> datetime:

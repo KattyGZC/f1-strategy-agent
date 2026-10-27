@@ -90,7 +90,7 @@ def test_season_fails_with_one_line_naming_the_request_and_keeps_what_was_stored
     stored = stored_keys(mongo_uri, database)
     assert "laps?session_key=9468" not in stored
     assert {
-        "meetings?year=2024",
+        "meetings?date_start<2025-01-01T00%3A00%3A00%2B00%3A00&year=2024",
         "sessions?date_end<2025-01-01T00%3A00%3A00%2B00%3A00&year=2024",
     } <= stored
     assert len(stored) < SEASON_REQUESTS

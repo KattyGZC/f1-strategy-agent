@@ -125,8 +125,8 @@ class IngestSeason:
         self, year: int, session_types: Collection[SessionType], now: datetime
     ) -> IngestionReport:
         ingestor = _Ingestor(self._source, self._store, self._max_concurrency)
-        await ingestor.ensure_all([meetings_request(year)])
         cutoff = season_cutoff(year, now, self._settle_time)
+        await ingestor.ensure_all([meetings_request(year, cutoff)])
         index = await ingestor.rows(season_sessions_request(year, cutoff))
         sessions = [
             session

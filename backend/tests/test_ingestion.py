@@ -134,7 +134,7 @@ async def test_season_stores_the_index_and_every_endpoint_of_the_chosen_sessions
     expected = 2 + RACE_ENDPOINT_COUNT + QUALIFYING_ENDPOINT_COUNT
     assert report == IngestionReport(sessions=2, requests=expected, fetched=expected, deleted=0)
     assert sorted(source.fetched) == sorted(store.responses)
-    assert meetings_request(2024).key in store.responses
+    assert meetings_request(2024, datetime(2025, 1, 1, tzinfo=UTC)).key in store.responses
     assert "intervals?session_key=9472" in store.responses
     assert "starting_grid?session_key=9468" in store.responses
 
@@ -209,6 +209,7 @@ async def test_a_season_in_progress_ingests_only_sessions_that_have_settled() ->
 
     assert report.sessions == 1
     assert "sessions?date_end<2024-03-02T04%3A00%3A00%2B00%3A00&year=2024" in store.responses
+    assert "meetings?date_start<2024-03-02T04%3A00%3A00%2B00%3A00&year=2024" in store.responses
     assert {response.request.session_key for response in store.responses.values()} == {
         None,
         QUALIFYING_KEY,
@@ -225,10 +226,11 @@ async def test_a_later_run_of_a_season_in_progress_adds_what_settled_since() -> 
     report = await season(later_source, store)(2024, RACE_AND_QUALIFYING, after_settling)
 
     assert report.sessions == 2
-    assert later_source.fetched[0] == (
-        "sessions?date_end<2024-03-02T18%3A00%3A00%2B00%3A00&year=2024"
-    )
-    assert report.fetched == 1 + RACE_ENDPOINT_COUNT
+    assert later_source.fetched[:2] == [
+        "meetings?date_start<2024-03-02T18%3A00%3A00%2B00%3A00&year=2024",
+        "sessions?date_end<2024-03-02T18%3A00%3A00%2B00%3A00&year=2024",
+    ]
+    assert report.fetched == 2 + RACE_ENDPOINT_COUNT
     assert all("9468" not in key for key in later_source.fetched)
 
 
