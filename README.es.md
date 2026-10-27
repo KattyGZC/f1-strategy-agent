@@ -29,7 +29,7 @@ cp .env.example .env
 make up
 ```
 
-Abre http://localhost:8080. `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita la línea nueva `POSTGRES_CONNECT_TIMEOUT_S` de `.env.example`.
+Abre http://localhost:8080. `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`.
 
 Con el stack levantado, ingiere datos crudos:
 
@@ -40,6 +40,14 @@ make ingest-telemetry SESSION=9472 # o de otra sesión (carrera de Baréin 2024)
 ```
 
 Si una ejecución falla, termina con código 1 y una línea que dice qué petición falló. Vuelve a lanzar el mismo comando: lo ya guardado se salta y la ejecución sigue desde ahí.
+
+Carga una temporada ingerida en el modelo limpio de PostgreSQL:
+
+```sh
+make transform YEAR=2026 # cada sesión ingerida que cambió desde su última carga, en alrededor de un minuto por temporada
+```
+
+Una sesión cuyos datos crudos aún están incompletos espera a la siguiente ejecución; una sesión con datos que el esquema no describe falla sola, con una línea que dice el documento y la fila, y la ejecución termina con código 1. Volver a lanzarlo carga solo lo que cambió (ADR 0008).
 
 ## Desarrollo
 

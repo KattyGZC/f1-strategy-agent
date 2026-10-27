@@ -29,7 +29,7 @@ cp .env.example .env
 make up
 ```
 
-Open http://localhost:8080. `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` line from `.env.example`.
+Open http://localhost:8080. `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` and `TRANSFORM_*` lines from `.env.example`.
 
 Ingest raw data while the stack is up:
 
@@ -40,6 +40,14 @@ make ingest-telemetry SESSION=9472 # or of another session (2024 Bahrain race); 
 ```
 
 If a run fails, it exits with code 1 and one line naming the request that failed. Run the same command again: what was stored is skipped and the run continues from there.
+
+Load an ingested season into the clean PostgreSQL model:
+
+```sh
+make transform YEAR=2026 # every ingested session that changed since its last load, in about a minute per season
+```
+
+A session whose raw data is still incomplete waits for the next run; a session whose data the schema does not describe fails alone, with one line naming the document and the row, and the run exits with code 1. Running it again loads only what changed (ADR 0008).
 
 ## Develop
 
