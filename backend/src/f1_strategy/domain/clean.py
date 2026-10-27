@@ -385,12 +385,18 @@ def content_hash(clean: CleanSession) -> str:
     return digest.hexdigest()
 
 
-def input_fingerprint(documents: Iterable[tuple[str, datetime]]) -> str:
-    """SHA-256 of the raw documents a session was built from: request key and fetch time."""
+def input_fingerprint(
+    session: JsonObject, meeting: JsonObject, documents: Iterable[tuple[str, datetime]]
+) -> str:
+    """SHA-256 of what a session is built from: the content of its index and meeting rows, and
+    the request key and fetch time of each of its own documents. The season index and the
+    calendar are stored again every hour of a season in progress, so their identity would
+    change the fingerprint of every session; only the session's rows in them count."""
     lines = sorted(
         {f"{key} {fetched_at.astimezone(UTC).isoformat()}" for key, fetched_at in documents}
     )
-    return hashlib.sha256("\n".join(lines).encode()).hexdigest()
+    context = [json.dumps(row, sort_keys=True) for row in (session, meeting)]
+    return hashlib.sha256("\n".join([*context, *lines]).encode()).hexdigest()
 
 
 def column_names(row_type: type[CleanRow]) -> tuple[str, ...]:

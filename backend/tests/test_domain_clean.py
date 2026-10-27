@@ -1,11 +1,9 @@
 import copy
-import json
 import random
-from dataclasses import dataclass
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from itertools import pairwise
-from pathlib import Path
 
 import pytest
 
@@ -20,11 +18,8 @@ from f1_strategy.domain.clean import (
     content_hash,
     input_fingerprint,
 )
-from f1_strategy.domain.openf1 import Endpoint, JsonObject, JsonValue, SessionName, SessionType
-
-SAMPLE = Path(__file__).parent / "fixtures" / "openf1_2024_bahrain_sample.json"
-RACE = "9472"
-QUALIFYING = "9468"
+from f1_strategy.domain.openf1 import Endpoint, JsonValue, SessionName, SessionType
+from tests.samples import QUALIFYING, RACE, Sample, sample
 
 # One entry per TRANSFORM_VERSION: the content hash of the sample's two sessions. A change to the
 # clean rows turns this test red; the fix is a new version with its new hash, never a new hash
@@ -35,27 +30,6 @@ GOLDEN = {
         "55d061f834f95c2a203c6a960084b020d8d7f380071dcf51f68d2d219ee8b3d1",
     ),
 }
-
-
-@dataclass
-class Sample:
-    """A mutable copy of one sampled session, to break before cleaning it."""
-
-    session: JsonObject
-    meeting: JsonObject
-    rows: dict[Endpoint, list[JsonObject]]
-
-    def raw(self) -> RawSession:
-        return RawSession(self.session, self.meeting, self.rows)
-
-    def driver_rows(self, endpoint: Endpoint, driver_number: int) -> list[JsonObject]:
-        return [row for row in self.rows[endpoint] if row["driver_number"] == driver_number]
-
-
-def sample(session_key: str) -> Sample:
-    data = json.loads(SAMPLE.read_text(encoding="utf-8"))[session_key]
-    rows = {Endpoint(endpoint): endpoint_rows for endpoint, endpoint_rows in data["rows"].items()}
-    return Sample(data["session"], data["meeting"], rows)
 
 
 def with_row(
@@ -367,17 +341,38 @@ def test_a_meeting_offset_in_another_format_fails() -> None:
     assert rejected(data.raw()) == "meetings: gmt_offset '+3' is not [-]HH:MM:SS"
 
 
-def test_the_input_fingerprint_depends_on_the_documents_not_their_order() -> None:
-    fetched = datetime(2026, 10, 27, 12, tzinfo=UTC)
-    documents = [("laps?session_key=9472", fetched), ("pit?session_key=9472", fetched)]
+FETCHED = datetime(2026, 10, 27, 12, tzinfo=UTC)
+DOCUMENTS = (("laps?session_key=9472", FETCHED), ("pit?session_key=9472", FETCHED))
 
-    assert input_fingerprint(documents) == input_fingerprint(reversed(documents))
-    assert input_fingerprint(documents) == input_fingerprint(
-        [(key, at.astimezone(timezone(timedelta(hours=2)))) for key, at in documents]
-    )
-    assert input_fingerprint(documents) != input_fingerprint(
-        [documents[0], (documents[1][0], fetched + timedelta(seconds=1))]
-    )
+
+def fingerprint(data: Sample, documents: Iterable[tuple[str, datetime]] = DOCUMENTS) -> str:
+    return input_fingerprint(data.session, data.meeting, documents)
+
+
+def test_the_input_fingerprint_ignores_the_order_and_zone_of_the_documents() -> None:
+    data = sample(RACE)
+    other_zone = [(key, at.astimezone(timezone(timedelta(hours=2)))) for key, at in DOCUMENTS]
+
+    assert fingerprint(data) == fingerprint(data, reversed(DOCUMENTS))
+    assert fingerprint(data) == fingerprint(data, other_zone)
+
+
+def test_the_input_fingerprint_changes_with_a_document_or_the_session_rows() -> None:
+    data = sample(RACE)
+    refetched = [DOCUMENTS[0], (DOCUMENTS[1][0], FETCHED + timedelta(seconds=1))]
+    changed_session = sample(RACE)
+    changed_session.session["date_end"] = "2024-03-02T17:30:00+00:00"
+    changed_meeting = sample(RACE)
+    changed_meeting.meeting["meeting_name"] = "Sakhir Grand Prix"
+
+    fingerprints = {
+        fingerprint(data),
+        fingerprint(data, refetched),
+        fingerprint(changed_session),
+        fingerprint(changed_meeting),
+    }
+
+    assert len(fingerprints) == 4
 
 
 def test_column_names_are_the_field_names_in_order() -> None:
