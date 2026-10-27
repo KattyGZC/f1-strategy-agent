@@ -1,4 +1,5 @@
 import json
+import sys
 
 from f1_strategy.adapters.http.app import create_app
 
@@ -8,4 +9,4 @@ def render_openapi() -> str:
 
 
 if __name__ == "__main__":
-    print(render_openapi(), end="")
+    sys.stdout.buffer.write(render_openapi().encode())
