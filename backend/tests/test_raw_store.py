@@ -166,3 +166,28 @@ async def test_the_endpoint_and_session_index_is_created_once(
     indexes = await mongo[database][COLLECTION].index_information()
     assert indexes[ENDPOINT_SESSION_INDEX]["key"] == [("endpoint", 1), ("session_key", 1)]
     assert sorted(indexes) == ["_id_", ENDPOINT_SESSION_INDEX]
+
+
+@pytest.mark.anyio
+async def test_fetched_at_reads_the_stamp_of_each_stored_request_only(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+    await store.put(RawResponse(LAPS, ROWS, FETCHED_AT))
+    await store.put(RawResponse(MEETINGS, [], datetime(2026, 10, 27, tzinfo=UTC)))
+    missing = RawRequest.of(Endpoint.PIT, {Param.SESSION_KEY: 9472})
+
+    stamps = await store.fetched_at([LAPS, MEETINGS, missing])
+
+    assert stamps == {LAPS.key: FETCHED_AT, MEETINGS.key: datetime(2026, 10, 27, tzinfo=UTC)}
+
+
+@pytest.mark.anyio
+async def test_fetched_at_refuses_a_naive_stamp(mongo_uri: str, database: str) -> None:
+    naive: AsyncMongoClient[MongoDocument] = AsyncMongoClient(mongo_uri)
+    async with naive:
+        store = MongoRawStore(naive, database)
+        await store.put(RawResponse(LAPS, ROWS, FETCHED_AT))
+
+        with pytest.raises(TypeError, match="fetched_at of laps"):
+            await store.fetched_at([LAPS])
