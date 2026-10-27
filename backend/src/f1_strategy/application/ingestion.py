@@ -14,6 +14,7 @@ from f1_strategy.domain.openf1 import (
     meetings_request,
     parse_driver_numbers,
     parse_sessions,
+    season_cutoff,
     season_sessions_request,
     session_request,
     session_requests,
@@ -44,15 +45,11 @@ class IngestionReport:
         return self.requests - self.fetched
 
 
-class SeasonNotFinishedError(ValueError):
-    pass
-
-
 class SessionNotFoundError(LookupError):
     pass
 
 
-class SessionNotEndedError(ValueError):
+class SessionNotSettledError(ValueError):
     pass
 
 
@@ -101,24 +98,27 @@ class _Ingestor:
 
 
 class IngestSeason:
-    def __init__(self, source: RawSource, store: RawStore, max_concurrency: int) -> None:
+    def __init__(
+        self, source: RawSource, store: RawStore, max_concurrency: int, settle_time: timedelta
+    ) -> None:
         self._source = source
         self._store = store
         self._max_concurrency = max_concurrency
+        self._settle_time = settle_time
 
     async def __call__(
         self, year: int, session_types: Collection[SessionType], now: datetime
     ) -> IngestionReport:
-        if year >= now.year:
-            raise SeasonNotFinishedError(
-                f"season {year} is not finished; only seasons before {now.year} are ingested"
-            )
         ingestor = _Ingestor(self._source, self._store, self._max_concurrency)
         await ingestor.ensure_all([meetings_request(year)])
+        cutoff = season_cutoff(year, now, self._settle_time)
+        index = await ingestor.rows(season_sessions_request(year, cutoff))
         sessions = [
             session
-            for session in parse_sessions(await ingestor.rows(season_sessions_request(year)))
-            if session.session_type in session_types and not session.is_cancelled
+            for session in parse_sessions(index)
+            if session.session_type in session_types
+            and not session.is_cancelled
+            and session.date_end < cutoff
         ]
         await ingestor.ensure_all(
             [request for session in sessions for request in session_requests(session)]
@@ -128,19 +128,27 @@ class IngestSeason:
 
 class IngestSessionTelemetry:
     def __init__(
-        self, source: RawSource, store: RawStore, max_concurrency: int, window: timedelta
+        self,
+        source: RawSource,
+        store: RawStore,
+        max_concurrency: int,
+        settle_time: timedelta,
+        window: timedelta,
     ) -> None:
         self._source = source
         self._store = store
         self._max_concurrency = max_concurrency
+        self._settle_time = settle_time
         self._window = window
 
     async def __call__(self, session_key: int, now: datetime) -> IngestionReport:
         ingestor = _Ingestor(self._source, self._store, self._max_concurrency)
         session = _single_session(session_key, await ingestor.rows(session_request(session_key)))
-        if session.date_end > now:
-            raise SessionNotEndedError(
-                f"session {session_key} ends at {session.date_end.isoformat()}"
+        settles_at = session.settles_at(self._settle_time)
+        if settles_at > now:
+            raise SessionNotSettledError(
+                f"session {session_key} ends at {session.date_end.isoformat()}; "
+                f"it can be ingested from {settles_at.isoformat()}"
             )
         driver_numbers = parse_driver_numbers(await ingestor.rows(drivers_request(session_key)))
         await ingestor.ensure_all(telemetry_requests(session, driver_numbers, self._window))
