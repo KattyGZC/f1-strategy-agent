@@ -11,6 +11,8 @@ from f1_strategy.domain.openf1 import (
     Session,
     SessionType,
     drivers_request,
+    grand_prix_request,
+    latest_race,
     meetings_request,
     parse_driver_numbers,
     parse_sessions,
@@ -18,6 +20,7 @@ from f1_strategy.domain.openf1 import (
     season_sessions_request,
     session_request,
     session_requests,
+    settled_cutoff,
     telemetry_requests,
 )
 
@@ -33,12 +36,15 @@ class RawStore(Protocol):
 
     async def put(self, response: RawResponse) -> None: ...
 
+    async def delete_telemetry_except(self, session_key: int) -> int: ...
+
 
 @dataclass(frozen=True)
 class IngestionReport:
     sessions: int
     requests: int
     fetched: int
+    deleted: int
 
     @property
     def already_stored(self) -> int:
@@ -62,6 +68,7 @@ class _Ingestor:
         self._max_concurrency = max_concurrency
         self._requests = 0
         self._fetched = 0
+        self._deleted = 0
 
     async def rows(self, request: RawRequest) -> list[JsonObject]:
         self._requests += 1
@@ -87,8 +94,16 @@ class _Ingestor:
         except ExceptionGroup as failures:
             raise failures.exceptions[0] from failures
 
+    async def delete_telemetry_except(self, session_key: int) -> None:
+        self._deleted += await self._store.delete_telemetry_except(session_key)
+
     def report(self, sessions: int) -> IngestionReport:
-        return IngestionReport(sessions=sessions, requests=self._requests, fetched=self._fetched)
+        return IngestionReport(
+            sessions=sessions,
+            requests=self._requests,
+            fetched=self._fetched,
+            deleted=self._deleted,
+        )
 
     async def _fetch_and_store(self, request: RawRequest) -> RawResponse:
         response = await self._source.fetch(request)
@@ -126,7 +141,7 @@ class IngestSeason:
         return ingestor.report(sessions=len(sessions))
 
 
-class IngestSessionTelemetry:
+class _TelemetryIngestion:
     def __init__(
         self,
         source: RawSource,
@@ -141,8 +156,21 @@ class IngestSessionTelemetry:
         self._settle_time = settle_time
         self._window = window
 
+    def _ingestor(self) -> _Ingestor:
+        return _Ingestor(self._source, self._store, self._max_concurrency)
+
+    async def _ingest(self, ingestor: _Ingestor, session: Session) -> IngestionReport:
+        driver_numbers = parse_driver_numbers(
+            await ingestor.rows(drivers_request(session.session_key))
+        )
+        await ingestor.ensure_all(telemetry_requests(session, driver_numbers, self._window))
+        await ingestor.delete_telemetry_except(session.session_key)
+        return ingestor.report(sessions=1)
+
+
+class IngestSessionTelemetry(_TelemetryIngestion):
     async def __call__(self, session_key: int, now: datetime) -> IngestionReport:
-        ingestor = _Ingestor(self._source, self._store, self._max_concurrency)
+        ingestor = self._ingestor()
         session = _single_session(session_key, await ingestor.rows(session_request(session_key)))
         settles_at = session.settles_at(self._settle_time)
         if settles_at > now:
@@ -150,9 +178,18 @@ class IngestSessionTelemetry:
                 f"session {session_key} ends at {session.date_end.isoformat()}; "
                 f"it can be ingested from {settles_at.isoformat()}"
             )
-        driver_numbers = parse_driver_numbers(await ingestor.rows(drivers_request(session_key)))
-        await ingestor.ensure_all(telemetry_requests(session, driver_numbers, self._window))
-        return ingestor.report(sessions=1)
+        return await self._ingest(ingestor, session)
+
+
+class IngestLatestGrandPrixTelemetry(_TelemetryIngestion):
+    async def __call__(self, now: datetime) -> IngestionReport:
+        ingestor = self._ingestor()
+        cutoff = settled_cutoff(now, self._settle_time)
+        races = parse_sessions(await ingestor.rows(grand_prix_request(cutoff)))
+        session = latest_race(races, cutoff)
+        if session is None:
+            raise SessionNotFoundError(f"no Grand Prix settled before {cutoff.isoformat()}")
+        return await self._ingest(ingestor, session)
 
 
 def _single_session(session_key: int, rows: list[JsonObject]) -> Session:
