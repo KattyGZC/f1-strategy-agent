@@ -282,6 +282,9 @@ type CleanRow = (
 )
 
 
+type CleanRecord = Meeting | SessionRow | CleanRow
+
+
 @dataclass(frozen=True)
 class RawSession:
     """The raw input of one session: its index row, its meeting's row, and each endpoint's rows."""
@@ -372,7 +375,7 @@ def clean_session(raw: RawSession) -> CleanSession:
 def content_hash(clean: CleanSession) -> str:
     """SHA-256 of every row of the session in table and key order; equal rows, equal hash."""
     digest = hashlib.sha256()
-    tables: tuple[tuple[str, Sequence[Meeting | SessionRow | CleanRow]], ...] = (
+    tables: tuple[tuple[str, Sequence[CleanRecord]], ...] = (
         ("meeting", (clean.meeting,)),
         ("session", (clean.session,)),
         *clean.tables(),
@@ -399,7 +402,7 @@ def input_fingerprint(
     return hashlib.sha256("\n".join([*context, *lines]).encode()).hexdigest()
 
 
-def column_names(row_type: type[CleanRow]) -> tuple[str, ...]:
+def column_names(row_type: type[CleanRecord]) -> tuple[str, ...]:
     return tuple(field.name for field in fields(row_type))
 
 

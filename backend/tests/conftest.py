@@ -1,9 +1,17 @@
+import asyncio
 from collections.abc import Iterator
 
 import pytest
 from sqlalchemy import make_url
 from testcontainers.community.mongodb import MongoDbContainer
 from testcontainers.community.postgres import PostgresContainer
+
+
+@pytest.fixture
+def anyio_backend() -> tuple[str, dict[str, object]]:
+    # psycopg's async driver cannot run on Windows' default proactor loop; the selector loop is
+    # the default everywhere else, so every platform runs the same loop.
+    return ("asyncio", {"loop_factory": asyncio.SelectorEventLoop})
 
 
 @pytest.fixture(scope="session")
