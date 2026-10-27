@@ -1,6 +1,6 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from urllib.parse import quote
 
@@ -40,11 +40,12 @@ class Param(StrEnum):
     DRIVER_NUMBER = "driver_number"
     DATE_FROM = "date>="
     DATE_BEFORE = "date<"
+    DATE_END_BEFORE = "date_end<"
 
 
 # OpenF1 decodes the whole query before reading operators, so a comparison is written
 # "date>=value"; "date>==value", which an encoded key=value pair turns into, is a 500 (2026-10-26).
-COMPARISON_PARAMS = frozenset({Param.DATE_FROM, Param.DATE_BEFORE})
+COMPARISON_PARAMS = frozenset({Param.DATE_FROM, Param.DATE_BEFORE, Param.DATE_END_BEFORE})
 
 
 SESSION_ENDPOINTS: Mapping[SessionType, tuple[Endpoint, ...]] = {
@@ -132,6 +133,9 @@ class Session:
     date_end: datetime
     is_cancelled: bool
 
+    def settles_at(self, settle_time: timedelta) -> datetime:
+        return self.date_end + settle_time
+
 
 class OpenF1PayloadError(ValueError):
     pass
@@ -141,8 +145,15 @@ def meetings_request(year: int) -> RawRequest:
     return RawRequest.of(Endpoint.MEETINGS, {Param.YEAR: year})
 
 
-def season_sessions_request(year: int) -> RawRequest:
-    return RawRequest.of(Endpoint.SESSIONS, {Param.YEAR: year})
+def season_cutoff(year: int, now: datetime, settle_time: timedelta) -> datetime:
+    season_end = datetime(year + 1, 1, 1, tzinfo=UTC)
+    return min(now - settle_time, season_end).replace(minute=0, second=0, microsecond=0)
+
+
+def season_sessions_request(year: int, cutoff: datetime) -> RawRequest:
+    return RawRequest.of(
+        Endpoint.SESSIONS, {Param.YEAR: year, Param.DATE_END_BEFORE: cutoff.isoformat()}
+    )
 
 
 def session_request(session_key: int) -> RawRequest:

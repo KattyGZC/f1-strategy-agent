@@ -8,7 +8,7 @@ PRACTICE_KEY = 9465
 CANCELLED_KEY = 9999
 RACE_START = datetime(2024, 3, 2, 15, tzinfo=UTC)
 RACE_END = datetime(2024, 3, 2, 17, tzinfo=UTC)
-AFTER_2024 = datetime(2025, 1, 1, tzinfo=UTC)
+SEASON_2024_SETTLED = datetime(2025, 2, 1, tzinfo=UTC)
 
 
 def session_row(
@@ -32,7 +32,12 @@ def session_row(
 
 SEASON_2024: list[JsonObject] = [
     session_row(PRACTICE_KEY, "Practice"),
-    session_row(QUALIFYING_KEY, "Qualifying"),
+    session_row(
+        QUALIFYING_KEY,
+        "Qualifying",
+        date_start="2024-03-01T16:00:00+00:00",
+        date_end="2024-03-01T17:00:00+00:00",
+    ),
     session_row(RACE_KEY, "Race"),
     session_row(CANCELLED_KEY, "Race", is_cancelled=True),
 ]

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -14,6 +14,7 @@ from f1_strategy.domain.openf1 import (
     meetings_request,
     parse_driver_numbers,
     parse_sessions,
+    season_cutoff,
     season_sessions_request,
     session_request,
     session_requests,
@@ -62,14 +63,49 @@ def test_request_key_does_not_depend_on_param_order() -> None:
 
 def test_index_requests() -> None:
     assert meetings_request(2024).key == "meetings?year=2024"
-    assert season_sessions_request(2024).key == "sessions?year=2024"
+    assert season_sessions_request(2024, datetime(2025, 1, 1, tzinfo=UTC)).key == (
+        "sessions?date_end<2025-01-01T00%3A00%3A00%2B00%3A00&year=2024"
+    )
     assert session_request(RACE_KEY).key == "sessions?session_key=9472"
     assert drivers_request(RACE_KEY).key == "drivers?session_key=9472"
 
 
 def test_session_key_is_read_from_params() -> None:
     assert session_request(RACE_KEY).session_key == RACE_KEY
-    assert season_sessions_request(2024).session_key is None
+    assert season_sessions_request(2024, RACE_END).session_key is None
+
+
+SETTLE = timedelta(hours=6)
+
+
+@pytest.mark.parametrize(
+    "now",
+    [datetime(2025, 2, 1, tzinfo=UTC), datetime(2031, 6, 1, 12, 34, tzinfo=UTC)],
+)
+def test_a_settled_season_is_cut_at_its_end_whenever_it_is_read(now: datetime) -> None:
+    assert season_cutoff(2024, now, SETTLE) == datetime(2025, 1, 1, tzinfo=UTC)
+
+
+def test_a_season_in_progress_is_cut_at_the_settle_time_truncated_to_the_hour() -> None:
+    now = datetime(2026, 10, 27, 3, 28, 3, 123, tzinfo=UTC)
+
+    assert season_cutoff(2026, now, SETTLE) == datetime(2026, 10, 26, 21, tzinfo=UTC)
+
+
+def test_the_new_year_does_not_cut_a_season_before_its_last_sessions_settle() -> None:
+    new_year = datetime(2025, 1, 1, 3, tzinfo=UTC)
+
+    assert season_cutoff(2024, new_year, SETTLE) == datetime(2024, 12, 31, 21, tzinfo=UTC)
+
+
+def test_a_future_season_is_cut_before_anything_settled() -> None:
+    now = datetime(2026, 10, 27, 3, tzinfo=UTC)
+
+    assert season_cutoff(2027, now, SETTLE) == datetime(2026, 10, 26, 21, tzinfo=UTC)
+
+
+def test_a_session_settles_its_settle_time_after_it_ends() -> None:
+    assert race().settles_at(SETTLE) == datetime(2024, 3, 2, 23, tzinfo=UTC)
 
 
 def test_race_plan_has_intervals_and_overtakes_but_no_starting_grid() -> None:
