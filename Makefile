@@ -1,7 +1,7 @@
 COMPOSE := docker compose --env-file .env -f infra/compose.yaml
 OPENAPI_TMP := .openapi-check
 INGEST := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
-MIGRATE := $(COMPOSE) run --rm backend python -m f1_strategy.adapters.migrate
+MIGRATE := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.migrate
 
 .PHONY: install check backend-check frontend-check openapi openapi-check format up down logs migrate ingest ingest-telemetry
 
