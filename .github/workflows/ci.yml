@@ -45,6 +45,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    env:
+      # The runner is thrown away after the job, and keeping a container that failed to start
+      # is what lets the next step print its logs.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
@@ -53,6 +57,16 @@ jobs:
           working-directory: backend
       - run: cd backend && uv sync --locked
       - run: make backend-check
+      - if: failure()
+        name: Containers started by the tests
+        run: |
+          docker version --format 'docker {{.Server.Version}}'
+          docker ps --all --no-trunc
+          for container in $(docker ps --all --quiet); do
+            echo "::group::$(docker inspect --format '{{.Config.Image}} {{.State.Status}} exit {{.State.ExitCode}}' "$container")"
+            docker logs "$container" 2>&1 | tail -n 100
+            echo "::endgroup::"
+          done
 
   frontend:
     needs: changes
