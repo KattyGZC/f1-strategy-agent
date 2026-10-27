@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -242,6 +242,20 @@ def _windows(start: datetime, end: datetime, window: timedelta) -> list[tuple[da
 
 def parse_sessions(rows: Sequence[JsonObject]) -> list[Session]:
     return [_parse_session(row) for row in rows]
+
+
+def chosen_sessions(
+    index: Sequence[JsonObject], session_types: Collection[SessionType], cutoff: datetime
+) -> list[Session]:
+    """The sessions of a season index that are ingested and cleaned: of a chosen type, not
+    cancelled, and ended before the cutoff."""
+    return [
+        session
+        for session in parse_sessions(index)
+        if session.session_type in session_types
+        and not session.is_cancelled
+        and session.date_end < cutoff
+    ]
 
 
 def parse_driver_numbers(rows: Sequence[JsonObject]) -> list[int]:

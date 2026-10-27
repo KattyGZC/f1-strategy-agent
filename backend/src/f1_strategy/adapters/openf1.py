@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from http import HTTPStatus
 
@@ -8,6 +7,7 @@ import httpx2
 
 from f1_strategy.adapters.rate_limit import SlidingWindowRateLimiter
 from f1_strategy.domain.openf1 import JsonObject, RawRequest, RawResponse
+from f1_strategy.domain.retry import RetryPolicy
 
 # OpenF1 answers an empty result with 404 and this body, not with [] (curl, 2026-10-26).
 NO_RESULTS_DETAIL = "No results found."
@@ -27,19 +27,6 @@ class OpenF1Error(Exception):
     def __init__(self, request: RawRequest, reason: str) -> None:
         super().__init__(f"GET /{request.key} -> {reason}")
         self.request = request
-
-
-@dataclass(frozen=True)
-class RetryPolicy:
-    max_attempts: int
-    backoff_base_s: float
-
-    def __post_init__(self) -> None:
-        if self.max_attempts < 1:
-            raise ValueError(f"max_attempts must be at least 1, got {self.max_attempts}")
-
-    def backoff_s(self, attempt: int) -> float:
-        return self.backoff_base_s * 2.0 ** (attempt - 1)
 
 
 class OpenF1Client:

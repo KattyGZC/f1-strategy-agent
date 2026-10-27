@@ -10,6 +10,7 @@ from f1_strategy.domain.openf1 import (
     RawResponse,
     Session,
     SessionType,
+    chosen_sessions,
     drivers_request,
     grand_prix_request,
     latest_race,
@@ -128,13 +129,7 @@ class IngestSeason:
         cutoff = season_cutoff(year, now, self._settle_time)
         await ingestor.ensure_all([meetings_request(year, cutoff)])
         index = await ingestor.rows(season_sessions_request(year, cutoff))
-        sessions = [
-            session
-            for session in parse_sessions(index)
-            if session.session_type in session_types
-            and not session.is_cancelled
-            and session.date_end < cutoff
-        ]
+        sessions = chosen_sessions(index, session_types, cutoff)
         await ingestor.ensure_all(
             [request for session in sessions for request in session_requests(session)]
         )

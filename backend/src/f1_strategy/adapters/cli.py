@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import httpx2
 from pymongo import AsyncMongoClient
 
-from f1_strategy.adapters.openf1 import OpenF1Client, OpenF1Error, RetryPolicy
+from f1_strategy.adapters.openf1 import OpenF1Client, OpenF1Error
 from f1_strategy.adapters.rate_limit import RateLimit, SlidingWindowRateLimiter
 from f1_strategy.adapters.raw_store import MongoDocument, MongoRawStore
 from f1_strategy.adapters.settings import Settings
@@ -22,6 +22,7 @@ from f1_strategy.application.ingestion import (
     SessionNotSettledError,
 )
 from f1_strategy.domain.openf1 import OpenF1PayloadError, SessionType
+from f1_strategy.domain.retry import RetryPolicy
 
 SECOND_S = 1.0
 MINUTE_S = 60.0
