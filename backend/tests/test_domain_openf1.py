@@ -65,7 +65,9 @@ def test_request_key_does_not_depend_on_param_order() -> None:
 
 
 def test_index_requests() -> None:
-    assert meetings_request(2024).key == "meetings?year=2024"
+    assert meetings_request(2024, datetime(2025, 1, 1, tzinfo=UTC)).key == (
+        "meetings?date_start<2025-01-01T00%3A00%3A00%2B00%3A00&year=2024"
+    )
     assert season_sessions_request(2024, datetime(2025, 1, 1, tzinfo=UTC)).key == (
         "sessions?date_end<2025-01-01T00%3A00%3A00%2B00%3A00&year=2024"
     )

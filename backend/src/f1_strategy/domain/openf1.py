@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -35,7 +35,10 @@ class SessionType(StrEnum):
 
 
 class SessionName(StrEnum):
+    QUALIFYING = "Qualifying"
+    SPRINT_QUALIFYING = "Sprint Qualifying"
     GRAND_PRIX = "Race"
+    SPRINT = "Sprint"
 
 
 class Param(StrEnum):
@@ -45,12 +48,15 @@ class Param(StrEnum):
     DRIVER_NUMBER = "driver_number"
     DATE_FROM = "date>="
     DATE_BEFORE = "date<"
+    DATE_START_BEFORE = "date_start<"
     DATE_END_BEFORE = "date_end<"
 
 
 # OpenF1 decodes the whole query before reading operators, so a comparison is written
 # "date>=value"; "date>==value", which an encoded key=value pair turns into, is a 500 (2026-10-26).
-COMPARISON_PARAMS = frozenset({Param.DATE_FROM, Param.DATE_BEFORE, Param.DATE_END_BEFORE})
+COMPARISON_PARAMS = frozenset(
+    {Param.DATE_FROM, Param.DATE_BEFORE, Param.DATE_START_BEFORE, Param.DATE_END_BEFORE}
+)
 
 
 SESSION_ENDPOINTS: Mapping[SessionType, tuple[Endpoint, ...]] = {
@@ -146,8 +152,10 @@ class OpenF1PayloadError(ValueError):
     pass
 
 
-def meetings_request(year: int) -> RawRequest:
-    return RawRequest.of(Endpoint.MEETINGS, {Param.YEAR: year})
+def meetings_request(year: int, cutoff: datetime) -> RawRequest:
+    return RawRequest.of(
+        Endpoint.MEETINGS, {Param.YEAR: year, Param.DATE_START_BEFORE: cutoff.isoformat()}
+    )
 
 
 def settled_cutoff(now: datetime, settle_time: timedelta) -> datetime:
@@ -234,6 +242,20 @@ def _windows(start: datetime, end: datetime, window: timedelta) -> list[tuple[da
 
 def parse_sessions(rows: Sequence[JsonObject]) -> list[Session]:
     return [_parse_session(row) for row in rows]
+
+
+def chosen_sessions(
+    index: Sequence[JsonObject], session_types: Collection[SessionType], cutoff: datetime
+) -> list[Session]:
+    """The sessions of a season index that are ingested and cleaned: of a chosen type, not
+    cancelled, and ended before the cutoff."""
+    return [
+        session
+        for session in parse_sessions(index)
+        if session.session_type in session_types
+        and not session.is_cancelled
+        and session.date_end < cutoff
+    ]
 
 
 def parse_driver_numbers(rows: Sequence[JsonObject]) -> list[int]:

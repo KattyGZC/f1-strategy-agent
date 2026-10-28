@@ -5,8 +5,10 @@ description = "Backend of the F1 Strategy Agent: ingestion, replay, predictive e
 authors = [{ name = "KattyGZC" }]
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.20.1",
     "fastapi>=0.162.0",
     "httpx2>=2.16.0",
+    "psycopg[binary,pool]>=3.3.6",
     "pydantic-settings>=2.16.1",
     "pymongo>=4.15",
     "uvicorn[standard]>=0.54.0",
@@ -38,10 +40,11 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --cov=f1_strategy --cov-report=term-missing --cov-fail-under=90"
+addopts = "--strict-markers --cov --cov-report=term-missing --cov-fail-under=90"
 filterwarnings = ["error"]
 
 [tool.coverage.run]
+source = ["src"]
 branch = true
 
 [tool.coverage.report]
@@ -66,5 +69,5 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.2",
-    "testcontainers[mongodb]>=4.13",
+    "testcontainers[mongodb,postgres]>=4.13",
 ]

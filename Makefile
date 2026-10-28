@@ -1,8 +1,9 @@
 COMPOSE := docker compose --env-file .env -f infra/compose.yaml
 OPENAPI_TMP := .openapi-check
-INGEST := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
+CLI := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
+MIGRATE := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.migrate
 
-.PHONY: install check backend-check frontend-check openapi openapi-check format up down logs ingest ingest-telemetry
+.PHONY: install check backend-check frontend-check openapi openapi-check format up down logs migrate ingest ingest-telemetry transform
 
 install:
 	cd backend && uv sync --locked
@@ -43,6 +44,7 @@ format:
 
 up:
 	$(COMPOSE) up --build --detach --wait
+	$(MIGRATE)
 
 down:
 	$(COMPOSE) down
@@ -50,9 +52,16 @@ down:
 logs:
 	$(COMPOSE) logs --follow
 
+migrate:
+	$(MIGRATE)
+
 ingest:
 	$(if $(YEAR),,$(error YEAR is required, e.g. make ingest YEAR=2024))
-	$(INGEST) season --year $(YEAR)
+	$(CLI) season --year $(YEAR)
 
 ingest-telemetry:
-	$(INGEST) telemetry $(if $(SESSION),--session-key $(SESSION))
+	$(CLI) telemetry $(if $(SESSION),--session-key $(SESSION))
+
+transform:
+	$(if $(YEAR),,$(error YEAR is required, e.g. make transform YEAR=2024))
+	$(CLI) transform --year $(YEAR)

@@ -1,4 +1,6 @@
+from collections.abc import Sequence
 from contextlib import suppress
+from datetime import datetime
 
 from pymongo import ASCENDING, AsyncMongoClient
 from pymongo.asynchronous.collection import AsyncCollection
@@ -32,6 +34,17 @@ class MongoRawStore:
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             raise TypeError(f"stored rows of {request.key} are not a list of objects")
         return rows
+
+    async def fetched_at(self, requests: Sequence[RawRequest]) -> dict[str, datetime]:
+        keys = [request.key for request in requests]
+        cursor = self._responses.find({"_id": {"$in": keys}}, {"fetched_at": 1})
+        stamps: dict[str, datetime] = {}
+        async for document in cursor:
+            fetched_at = document["fetched_at"]
+            if not isinstance(fetched_at, datetime) or fetched_at.tzinfo is None:
+                raise TypeError(f"fetched_at of {document['_id']} is not an aware datetime")
+            stamps[str(document["_id"])] = fetched_at
+        return stamps
 
     async def put(self, response: RawResponse) -> None:
         request = response.request

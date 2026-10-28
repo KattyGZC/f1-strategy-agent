@@ -11,6 +11,7 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0005](0005-react-vite-typescript-frontend.md) | React, Vite and TypeScript for the frontend | Accepted |
 | [0006](0006-raw-data-scope.md) | Raw data scope: Race and Qualifying by season, telemetry by session | Accepted; telemetry superseded by 0007 |
 | [0007](0007-telemetry-of-the-latest-grand-prix.md) | Telemetry of the latest settled Grand Prix, one session kept | Accepted |
+| [0008](0008-deterministic-clean-model.md) | A deterministic clean model: one transaction per session, replaced whole | Accepted |
 
 ## Template
 

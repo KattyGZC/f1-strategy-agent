@@ -22,6 +22,7 @@ from f1_strategy.domain.openf1 import (
 
 FETCHED_AT = datetime(2026, 10, 26, 12, tzinfo=UTC)
 LAPS = RawRequest.of(Endpoint.LAPS, {Param.SESSION_KEY: 9472})
+MEETINGS = meetings_request(2024, datetime(2025, 1, 1, tzinfo=UTC))
 ROWS: list[JsonObject] = [
     {"lap_number": 1, "lap_duration": 100.537, "segments_sector_1": [None, 2048]}
 ]
@@ -73,9 +74,9 @@ async def test_the_document_is_keyed_by_the_request_and_keeps_its_provenance(
 async def test_a_request_without_a_session_is_stored_with_a_null_session_key(
     mongo: AsyncMongoClient[MongoDocument], database: str
 ) -> None:
-    await MongoRawStore(mongo, database).put(RawResponse(meetings_request(2024), [], FETCHED_AT))
+    await MongoRawStore(mongo, database).put(RawResponse(MEETINGS, [], FETCHED_AT))
 
-    document = await mongo[database][COLLECTION].find_one({"_id": "meetings?year=2024"})
+    document = await mongo[database][COLLECTION].find_one({"_id": MEETINGS.key})
 
     assert document is not None
     assert document["session_key"] is None
@@ -140,7 +141,7 @@ async def test_deleting_telemetry_keeps_the_given_session_and_every_other_endpoi
         telemetry(Endpoint.CAR_DATA, 11396),
         telemetry(Endpoint.LOCATION, 11396),
         LAPS,
-        meetings_request(2024),
+        MEETINGS,
     ]
     deleted = [telemetry(Endpoint.CAR_DATA, 9472), telemetry(Endpoint.LOCATION, 9472)]
     for request in kept + deleted:
@@ -165,3 +166,28 @@ async def test_the_endpoint_and_session_index_is_created_once(
     indexes = await mongo[database][COLLECTION].index_information()
     assert indexes[ENDPOINT_SESSION_INDEX]["key"] == [("endpoint", 1), ("session_key", 1)]
     assert sorted(indexes) == ["_id_", ENDPOINT_SESSION_INDEX]
+
+
+@pytest.mark.anyio
+async def test_fetched_at_reads_the_stamp_of_each_stored_request_only(
+    mongo: AsyncMongoClient[MongoDocument], database: str
+) -> None:
+    store = MongoRawStore(mongo, database)
+    await store.put(RawResponse(LAPS, ROWS, FETCHED_AT))
+    await store.put(RawResponse(MEETINGS, [], datetime(2026, 10, 27, tzinfo=UTC)))
+    missing = RawRequest.of(Endpoint.PIT, {Param.SESSION_KEY: 9472})
+
+    stamps = await store.fetched_at([LAPS, MEETINGS, missing])
+
+    assert stamps == {LAPS.key: FETCHED_AT, MEETINGS.key: datetime(2026, 10, 27, tzinfo=UTC)}
+
+
+@pytest.mark.anyio
+async def test_fetched_at_refuses_a_naive_stamp(mongo_uri: str, database: str) -> None:
+    naive: AsyncMongoClient[MongoDocument] = AsyncMongoClient(mongo_uri)
+    async with naive:
+        store = MongoRawStore(naive, database)
+        await store.put(RawResponse(LAPS, ROWS, FETCHED_AT))
+
+        with pytest.raises(TypeError, match="fetched_at of laps"):
+            await store.fetched_at([LAPS])

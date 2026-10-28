@@ -3,9 +3,10 @@ from datetime import UTC, datetime
 import httpx2
 import pytest
 
-from f1_strategy.adapters.openf1 import OpenF1Client, OpenF1Error, RetryPolicy
+from f1_strategy.adapters.openf1 import OpenF1Client, OpenF1Error
 from f1_strategy.adapters.rate_limit import RateLimit, SlidingWindowRateLimiter
 from f1_strategy.domain.openf1 import Endpoint, JsonObject, Param, RawRequest, RawResponse
+from f1_strategy.domain.retry import RetryPolicy
 from tests.factories import FakeClock
 
 BASE_URL = "https://openf1.test/v1"
