@@ -60,6 +60,10 @@ A replay reads only the clean model. A pure domain function turns a session's ro
 - Speeds are a closed set, defined once. The replay clock starts at the first event's instant.
 - The replay's state (session, speed, status, the anchor between session time and wall time) lives in Redis next to its stream. A producer holds a lease on its replay in Redis; if the process dies, the lease expires and the next request for that replay starts a producer that resumes from the last id in the stream.
 - Bounds are configured: the number of active replays, the idle time after which a replay and its stream expire, and the lease length. A replay over the limit is refused, not queued.
+- A producer re-reads its replay's state every tick (`REPLAY_TICK_S`, shorter than the lease) and renews its lease, so a pause or a new speed applied through any process takes effect within a tick. Controls change the state atomically in the store, so two at once do not lose one.
+- Pacing is pure (`domain/playback.py`). An event is due when its wall instant has come, computed by the same function the producer waits with, so float rounding cannot leave an event whose wait is over unsent.
+- A producer that fails records the error on its replay, where the viewer reads it; the other replays keep running, and a failed replay is not produced again.
+- The store enforces the limit on active replays when it creates one, so the check and the insert cannot race.
 - The frontend folds events into what it shows. It does not compute lap times, gaps or strategy (`AGENTS.md`); every number it shows came in an event.
 - Redis runs in `infra/compose.yaml` and in CI; its adapter is tested against a real container. The Redis client is imported by one adapter module.
 - Replaying telemetry needs it in the clean model first. That is a separate decision.
