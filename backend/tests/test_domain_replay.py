@@ -1,6 +1,5 @@
 import random
 from collections import Counter
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from itertools import pairwise
@@ -23,23 +22,11 @@ from f1_strategy.domain.clean import (
     clean_session,
 )
 from f1_strategy.domain.replay import EventKind, LapCompleted, Timeline, timeline
+from tests.replay_rows import Rows
 from tests.samples import QUALIFYING, RACE, sample
 
 SESSION = 9472
 T0 = datetime(2024, 3, 2, 15, tzinfo=UTC)
-
-
-@dataclass
-class Rows:
-    laps: list[Lap] = field(default_factory=list)
-    stints: list[Stint] = field(default_factory=list)
-    pits: list[Pit] = field(default_factory=list)
-    intervals: list[Interval] = field(default_factory=list)
-    positions: list[Position] = field(default_factory=list)
-    race_control: list[RaceControl] = field(default_factory=list)
-    weather: list[Weather] = field(default_factory=list)
-    overtakes: list[Overtake] = field(default_factory=list)
-    team_radio: list[TeamRadio] = field(default_factory=list)
 
 
 def lap(
