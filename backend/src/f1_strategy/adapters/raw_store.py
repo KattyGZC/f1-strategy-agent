@@ -12,10 +12,15 @@ COLLECTION = "openf1_responses"
 ENDPOINT_SESSION_INDEX = "endpoint_session_key"
 
 type MongoDocument = dict[str, object]
+type MongoClient = AsyncMongoClient[MongoDocument]
+
+
+def mongo_client(mongo_uri: str) -> MongoClient:
+    return AsyncMongoClient(mongo_uri, tz_aware=True)
 
 
 class MongoRawStore:
-    def __init__(self, client: AsyncMongoClient[MongoDocument], database: str) -> None:
+    def __init__(self, client: MongoClient, database: str) -> None:
         self._responses: AsyncCollection[MongoDocument] = client[database][COLLECTION]
 
     async def ensure_indexes(self) -> None:

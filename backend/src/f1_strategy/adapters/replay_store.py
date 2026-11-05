@@ -6,10 +6,12 @@ atomically. Expiry is measured from the last read of a viewer: a replay nobody w
 """
 
 from collections.abc import Callable, Sequence
+from contextlib import suppress
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from redis.asyncio import BlockingConnectionPool, Redis
+from redis.asyncio.client import Pipeline
 from redis.exceptions import WatchError
 
 from f1_strategy.adapters.replay_events import wire_event
@@ -149,18 +151,8 @@ class RedisReplayStore:
         key = _state_key(replay_id)
         async with self._redis.pipeline(transaction=True) as pipe:
             for _ in range(UPDATE_ATTEMPTS):
-                try:
-                    await pipe.watch(key)
-                    stored = await pipe.get(key)
-                    if stored is None:
-                        return None
-                    changed = change(_decode(stored))
-                    pipe.multi()  # type: ignore[no-untyped-call]  # unannotated in redis-py 8
-                    pipe.set(key, _encode(changed), keepttl=True)
-                    await pipe.execute()
-                    return changed
-                except WatchError:
-                    continue
+                with suppress(WatchError):
+                    return await _change_once(pipe, key, change)
         raise RuntimeError(f"replay {replay_id} changed {UPDATE_ATTEMPTS} times while updated")
 
     async def sent(self, replay_id: str) -> int:
@@ -197,6 +189,21 @@ class RedisReplayStore:
 
     async def release_lease(self, replay_id: str, owner: str) -> None:
         await self._release_lease(keys=[_lease_key(replay_id)], args=[owner])
+
+
+async def _change_once(
+    pipe: Pipeline, key: str, change: Callable[[ReplayState], ReplayState]
+) -> ReplayState | None:
+    """Raises `WatchError` when another writer changed the key between the read and the write."""
+    await pipe.watch(key)
+    stored = await pipe.get(key)
+    if stored is None:
+        return None
+    changed = change(_decode(stored))
+    pipe.multi()  # type: ignore[no-untyped-call]  # unannotated in redis-py 8
+    pipe.set(key, _encode(changed), keepttl=True)
+    await pipe.execute()
+    return changed
 
 
 def _state_key(replay_id: str) -> str:

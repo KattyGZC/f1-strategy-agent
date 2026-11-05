@@ -22,6 +22,14 @@ RETRYABLE_STATUSES = frozenset(
 )
 ERROR_BODY_PREVIEW_CHARS = 200
 
+type HttpTransport = httpx2.AsyncBaseTransport
+type OpenF1Http = httpx2.AsyncClient
+
+
+def openf1_http(base_url: str, timeout_s: float, transport: HttpTransport | None) -> OpenF1Http:
+    """A closed client; open it with `async with`. A transport replaces the network in tests."""
+    return httpx2.AsyncClient(base_url=base_url, timeout=timeout_s, transport=transport)
+
 
 class OpenF1Error(Exception):
     def __init__(self, request: RawRequest, reason: str) -> None:
@@ -32,7 +40,7 @@ class OpenF1Error(Exception):
 class OpenF1Client:
     def __init__(
         self,
-        http: httpx2.AsyncClient,
+        http: OpenF1Http,
         limiter: SlidingWindowRateLimiter,
         retry: RetryPolicy,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
