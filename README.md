@@ -11,7 +11,7 @@ Phase 0, the foundation:
 - **Backend** (`backend/`): Python 3.12, FastAPI, one endpoint, `GET /api/health`. Layered as domain, application and adapters; `import-linter` fails the build if an inner layer imports an outer one.
 - **Frontend** (`frontend/`): React, Vite and TypeScript in strict mode. It shows the API status through a client generated from the backend's OpenAPI schema.
 - **Infrastructure** (`infra/compose.yaml`): PostgreSQL with pgvector, MongoDB, Redis, the backend and the frontend.
-- **CI** (`.github/workflows/ci.yml`): the same checks as `make check` on every pull request, a check that the generated client matches the API, and a smoke test of the full stack.
+- **CI** (`.github/workflows/ci.yml`): the same checks as `make check` on every pull request, a check that the generated client matches the API, and a smoke test of the full stack. `main` takes changes only through a pull request with these checks green; the owner can merge past a red one (ADR 0010).
 
 Phase 1, ingestion:
 
@@ -61,10 +61,12 @@ A session whose raw data is still incomplete waits for the next run; a session w
 ## Develop
 
 ```sh
-make install   # backend and frontend dependencies
-make check     # lint, format, types, layer rules, tests with coverage, build, API contract
-make format    # apply the formatters
-make openapi   # regenerate the frontend API client after changing an endpoint
+make install    # backend and frontend dependencies
+make check      # lint, format, types, layer rules, tests with coverage, build, API contract
+make fast-check # the static half of make check, in about a minute; Claude Code runs it before a commit
+make mutation   # mutation testing of the domain in a Linux container (Docker, about three minutes)
+make format     # apply the formatters
+make openapi    # regenerate the frontend API client after changing an endpoint
 ```
 
 ## How it is built
