@@ -1,6 +1,6 @@
 # 0009. Replay from the clean model, through Redis Streams, to the browser over SSE
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-29
 
 ## Context
