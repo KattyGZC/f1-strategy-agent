@@ -12,6 +12,9 @@ from f1_strategy.domain.clean import (
     CleanDataError,
     Compound,
     Lap,
+    Pit,
+    RaceControl,
+    RaceControlCategory,
     RawSession,
     clean_session,
     column_names,
@@ -157,6 +160,63 @@ def test_race_results_keep_points_and_qualifying_results_split_into_phases() -> 
     assert [phase.phase for phase in qualifying.qualifying_phases] == [1, 2, 3] * 4
 
 
+def test_a_pit_keeps_its_lane_and_stop_durations() -> None:
+    raw = with_row(RACE, Endpoint.PIT, 0, stop_duration=2.4)
+
+    pits = clean_session(raw).pits
+
+    assert next(pit for pit in pits if (pit.driver_number, pit.lap_number) == (16, 11)) == Pit(
+        session_key=9472,
+        driver_number=16,
+        lap_number=11,
+        date=datetime(2024, 3, 2, 15, 22, 6, 457_000, tzinfo=UTC),
+        lane_duration=Decimal("24.0"),
+        stop_duration=Decimal("2.4"),
+    )
+
+
+def test_a_race_control_message_keeps_every_field() -> None:
+    raw = with_row(RACE, Endpoint.RACE_CONTROL, 0, driver_number=1)
+
+    assert clean_session(raw).race_control[0] == RaceControl(
+        session_key=9472,
+        seq=0,
+        date=datetime(2024, 3, 2, 14, 6, 41, tzinfo=UTC),
+        category=RaceControlCategory.OTHER,
+        flag=None,
+        scope=None,
+        sector=None,
+        driver_number=1,
+        lap_number=1,
+        qualifying_phase=None,
+        message="PINK HEAD PADDING MATERIAL MUST BE USED",
+    )
+
+
+def test_a_session_without_race_control_has_no_messages() -> None:
+    data = sample(RACE)
+    del data.rows[Endpoint.RACE_CONTROL]
+
+    assert clean_session(data.raw()).race_control == ()
+
+
+def test_rainfall_one_means_it_rained() -> None:
+    raw = with_row(RACE, Endpoint.WEATHER, 0, date="2024-03-02T14:00:00+00:00", rainfall=1)
+
+    weather = clean_session(raw).weather
+
+    assert [row.rainfall for row in weather] == [True, False, False, False, False, False]
+
+
+def test_a_race_result_laps_behind_has_no_gap_in_seconds() -> None:
+    raw = with_row(RACE, Endpoint.SESSION_RESULT, 0, gap_to_leader="+1 LAP")
+
+    results = clean_session(raw).results
+
+    leader = next(result for result in results if result.driver_number == 1)
+    assert (leader.gap_to_leader_s, leader.gap_to_leader_laps) == (None, 1)
+
+
 def test_race_control_is_keyed_by_its_position_in_the_raw_document() -> None:
     clean = clean_session(sample(RACE).raw())
 
@@ -217,6 +277,31 @@ def test_stints_may_share_the_lap_of_the_stop() -> None:
             id="a required value missing",
         ),
         pytest.param(
+            with_row(RACE, Endpoint.LAPS, 0, lap_number=None),
+            "laps row 0: lap_number is null",
+            id="a required integer missing",
+        ),
+        pytest.param(
+            with_row(RACE, Endpoint.STINTS, 0, compound=None),
+            "stints row 0: compound is null",
+            id="a required closed-set value missing",
+        ),
+        pytest.param(
+            with_row(RACE, Endpoint.INTERVALS, 0, interval=True),
+            "intervals row 0: interval must be a number",
+            id="a gap that is neither a number nor laps",
+        ),
+        pytest.param(
+            with_row(RACE, Endpoint.RACE_CONTROL, 2, category="Weather"),
+            "race_control row 2: category 'Weather' is not one of",
+            id="a race control message outside its closed set",
+        ),
+        pytest.param(
+            with_row(RACE, Endpoint.RACE_CONTROL, 0, session_key=9999),
+            "race_control row 0: session_key 9999 is not 9472",
+            id="a race control message of another session",
+        ),
+        pytest.param(
             with_row(RACE, Endpoint.INTERVALS, 0, interval="+1 LAP AHEAD"),
             "intervals row 0: interval '+1 LAP AHEAD' is neither seconds nor laps behind",
             id="a gap in an unknown unit",
@@ -247,6 +332,21 @@ def test_stints_may_share_the_lap_of_the_stop() -> None:
             id="two qualifying phases",
         ),
         pytest.param(
+            with_row(QUALIFYING, Endpoint.SESSION_RESULT, 0, gap_to_leader=[0.1, 0.2]),
+            "session_result row 0: gap_to_leader of a qualifying result must be a list of three",
+            id="two qualifying gaps",
+        ),
+        pytest.param(
+            with_row(QUALIFYING, Endpoint.SESSION_RESULT, 0, duration=["1:30.031", 89.4, 89.2]),
+            "session_result row 0: duration must be a number, got '1:30.031'",
+            id="a qualifying phase time as text",
+        ),
+        pytest.param(
+            with_row(QUALIFYING, Endpoint.SESSION_RESULT, 0, gap_to_leader=["+1 LAP", 0.2, 0.0]),
+            "session_result row 0: gap_to_leader must be a number, got '+1 LAP'",
+            id="a qualifying phase gap as laps",
+        ),
+        pytest.param(
             with_row(RACE, Endpoint.TEAM_RADIO, 0, recording_url=5),
             "team_radio row 0: recording_url must be a string",
             id="a text sent as a number",
@@ -269,12 +369,37 @@ def test_a_missing_field_fails_the_session() -> None:
     assert rejected(data.raw()) == "laps row 0: st_speed is missing"
 
 
-def test_two_rows_with_one_key_fail_the_session() -> None:
-    data = sample(RACE)
-    laps = data.rows[Endpoint.LAPS]
-    laps.append(copy.deepcopy(laps[0]))
+def test_a_failure_carries_its_endpoint_and_row() -> None:
+    with pytest.raises(CleanDataError) as error:
+        clean_session(with_row(RACE, Endpoint.LAPS, 2, lap_number="1"))
 
-    assert rejected(data.raw()).startswith("laps: two rows share the key")
+    assert (error.value.endpoint, error.value.row) == (Endpoint.LAPS, 2)
+
+
+KEYED_TABLES = (
+    Endpoint.DRIVERS,
+    Endpoint.LAPS,
+    Endpoint.STINTS,
+    Endpoint.PIT,
+    Endpoint.INTERVALS,
+    Endpoint.POSITION,
+    Endpoint.WEATHER,
+    Endpoint.SESSION_RESULT,
+    Endpoint.OVERTAKES,
+    Endpoint.TEAM_RADIO,
+)
+
+
+@pytest.mark.parametrize(
+    ("key", "endpoint"),
+    [*((RACE, endpoint) for endpoint in KEYED_TABLES), (QUALIFYING, Endpoint.STARTING_GRID)],
+)
+def test_two_rows_with_one_key_fail_the_session(key: str, endpoint: Endpoint) -> None:
+    data = sample(key)
+    rows = data.rows[endpoint]
+    rows.append(copy.deepcopy(rows[0]))
+
+    assert rejected(data.raw()).startswith(f"{endpoint}: two rows share the key")
 
 
 def test_stints_numbered_with_a_gap_fail_the_session() -> None:
@@ -292,6 +417,19 @@ def test_a_stint_that_skips_laps_fails_the_session() -> None:
     stints[1]["lap_end"] = integer(stints[1]["lap_start"]) + 20
 
     assert rejected(data.raw()).startswith("stints: driver 1 stint 2 starts on lap")
+
+
+def test_a_stint_without_an_end_still_lets_the_later_stints_be_compared() -> None:
+    data = sample(RACE)
+    by_number = sorted(
+        data.driver_rows(Endpoint.STINTS, 1), key=lambda row: integer(row["stint_number"])
+    )
+    by_number[0]["lap_end"] = None
+    by_number[2]["lap_start"] = 40
+
+    assert rejected(data.raw()) == (
+        "stints: driver 1 stint 3 starts on lap 40, stint 2 ended on lap 37"
+    )
 
 
 def test_stints_without_a_lap_range_are_not_compared() -> None:
@@ -325,7 +463,11 @@ def test_rows_of_an_endpoint_the_session_type_does_not_have_fail() -> None:
 
 @pytest.mark.parametrize(
     ("offset", "expected"),
-    [("-05:00:00", -timedelta(hours=5)), ("05:30:00", timedelta(hours=5, minutes=30))],
+    [
+        ("-05:00:00", -timedelta(hours=5)),
+        ("05:30:00", timedelta(hours=5, minutes=30)),
+        ("05:45:30", timedelta(hours=5, minutes=45, seconds=30)),
+    ],
 )
 def test_the_meeting_offset_keeps_its_sign(offset: str, expected: timedelta) -> None:
     data = sample(RACE)
@@ -341,6 +483,9 @@ def test_a_meeting_offset_in_another_format_fails() -> None:
     assert rejected(data.raw()) == "meetings: gmt_offset '+3' is not [-]HH:MM:SS"
 
 
+# Fingerprints are stored with each load (transform_run), so a change of their format loads every
+# session again. This pins it; a deliberate change updates it.
+GOLDEN_FINGERPRINT = "0c5a8694bb77443645e1cee7ff6d21f69e515f3212a65d449f3dcbd258fdc8b1"
 FETCHED = datetime(2026, 10, 27, 12, tzinfo=UTC)
 DOCUMENTS = (("laps?session_key=9472", FETCHED), ("pit?session_key=9472", FETCHED))
 
@@ -349,12 +494,19 @@ def fingerprint(data: Sample, documents: Iterable[tuple[str, datetime]] = DOCUME
     return input_fingerprint(data.session, data.meeting, documents)
 
 
+def test_the_input_fingerprint_is_pinned() -> None:
+    assert fingerprint(sample(RACE)) == GOLDEN_FINGERPRINT
+
+
 def test_the_input_fingerprint_ignores_the_order_and_zone_of_the_documents() -> None:
     data = sample(RACE)
     other_zone = [(key, at.astimezone(timezone(timedelta(hours=2)))) for key, at in DOCUMENTS]
+    reordered = sample(RACE)
+    reordered.session = dict(reversed(reordered.session.items()))
 
     assert fingerprint(data) == fingerprint(data, reversed(DOCUMENTS))
     assert fingerprint(data) == fingerprint(data, other_zone)
+    assert fingerprint(data) == fingerprint(reordered)
 
 
 def test_the_input_fingerprint_changes_with_a_document_or_the_session_rows() -> None:

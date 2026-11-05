@@ -126,7 +126,7 @@ dev = [
 ]
 
 [tool.mutmut]
-paths_to_mutate = ["src/f1_strategy/domain/"]
+source_paths = ["src/f1_strategy/domain/"]
 # The use case tests import the application layer, which is copied but not mutated.
 also_copy = ["src/f1_strategy/application/"]
 pytest_add_cli_args = ["--no-cov", "-p", "no:cacheprovider"]
@@ -135,6 +135,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_domain_openf1.py",
     "tests/test_domain_playback.py",
     "tests/test_domain_replay.py",
+    "tests/test_domain_retry.py",
     "tests/test_ingestion.py",
     "tests/test_replay.py",
     "tests/test_transform.py",

@@ -10,6 +10,7 @@ from f1_strategy.domain.openf1 import (
     RawRequest,
     Session,
     SessionType,
+    chosen_sessions,
     drivers_request,
     grand_prix_request,
     latest_race,
@@ -54,6 +55,12 @@ def test_request_key_is_endpoint_plus_sorted_encoded_params() -> None:
         "&date>=2024-03-02T15%3A00%3A00%2B00%3A00&driver_number=1&session_key=9472"
     )
     assert request.key == f"car_data?{request.query}"
+
+
+def test_a_query_value_is_encoded_whole() -> None:
+    request = RawRequest.of(Endpoint.SESSIONS, {Param.SESSION_NAME: "Sprint/Shootout"})
+
+    assert request.key == "sessions?session_name=Sprint%2FShootout"
 
 
 def test_request_key_does_not_depend_on_param_order() -> None:
@@ -176,6 +183,16 @@ def test_races_ending_together_are_broken_by_the_higher_session_key() -> None:
 def test_there_is_no_latest_race_before_the_first_settles() -> None:
     assert latest_race([], CUTOFF) is None
     assert latest_race([grand_prix(11396, OCTOBER_25)], OCTOBER_11) is None
+
+
+def test_a_session_ending_at_the_cutoff_is_not_chosen() -> None:
+    index = [session_row(RACE_KEY, "Race")]
+    just_after = RACE_END + timedelta(microseconds=1)
+
+    assert chosen_sessions(index, {SessionType.RACE}, RACE_END) == []
+    assert [
+        session.session_key for session in chosen_sessions(index, {SessionType.RACE}, just_after)
+    ] == [RACE_KEY]
 
 
 def test_a_session_settles_its_settle_time_after_it_ends() -> None:

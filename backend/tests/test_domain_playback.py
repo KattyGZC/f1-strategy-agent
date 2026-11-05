@@ -7,6 +7,7 @@ from f1_strategy.domain.playback import (
     Paused,
     Playing,
     ReplaySpeed,
+    due_until,
     offsets_s,
     paused,
     resumed,
@@ -50,6 +51,17 @@ def test_an_event_falls_due_when_session_time_reaches_it() -> None:
 
     assert due_s == WALL_S + 3.0
     assert session_s_at(playing, due_s) == 160.0
+
+
+@pytest.mark.parametrize(
+    "playback",
+    [Paused(ReplaySpeed.X1, 0.0), Playing(ReplaySpeed.X1, 0.0, WALL_S)],
+    ids=["paused", "playing"],
+)
+def test_events_already_sent_stay_sent(playback: Paused | Playing) -> None:
+    offsets = [0.0, 1.0, 2.0, 3.0]
+
+    assert due_until(playback, offsets, 3, WALL_S) == 3
 
 
 def test_pausing_keeps_the_session_time() -> None:
