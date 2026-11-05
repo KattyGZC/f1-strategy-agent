@@ -10,7 +10,7 @@ Fase 0, la base:
 
 - **Backend** (`backend/`): Python 3.12, FastAPI, un endpoint, `GET /api/health`. En capas: dominio, aplicación y adaptadores; `import-linter` rompe el build si una capa interna importa una externa.
 - **Frontend** (`frontend/`): React, Vite y TypeScript en modo estricto. Muestra el estado de la API mediante un cliente generado a partir del esquema OpenAPI del backend.
-- **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, el backend y el frontend.
+- **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, Redis, el backend y el frontend.
 - **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API y una prueba de humo del stack completo.
 
 Fase 1, la ingesta:
@@ -23,7 +23,11 @@ Fase 2, el modelo limpio:
 - **Tablas tipadas en PostgreSQL** para cada sesión ingerida: meetings, sesiones, pilotos por sesión, vueltas, stints, paradas, intervalos, posiciones, control de carrera, clima, resultados, fases de clasificación, parrilla de salida, adelantamientos y radio del equipo. Los tiempos y gaps son números exactos, un gap de "+1 LAP" es un número de vueltas, los conjuntos cerrados son enums y las restricciones rechazan lo que la temporada 2024 no mostró ([ADR 0008](docs/adr/0008-deterministic-clean-model.md)).
 - **Una carga determinista**: los mismos datos crudos dan las mismas filas, sin importar el orden, el número de workers o una caída a mitad. Cada sesión se reemplaza entera en una transacción, volver a lanzarlo carga solo lo que cambió, y una sesión con datos malos falla sola, con el documento y la fila que la causaron.
 
-El replay, el simulador y el asistente todavía no existen.
+Fase 3, el replay (en curso):
+
+- **Una API de replay** sobre cualquier sesión del modelo limpio: `POST /api/replays` inicia uno de 1x a 60x, `/pause`, `/resume` y `/speed` lo controlan, y `GET /api/replays/{id}/events` transmite sus vueltas, posiciones, intervalos, paradas, control de carrera, clima, adelantamientos y radio del equipo por Server-Sent Events, en el orden y al ritmo en que ocurrieron. Un espectador que se reconecta sigue después de su último evento. Los eventos pasan por un stream de Redis por replay; la misma sesión da siempre el mismo stream ([ADR 0009](docs/adr/0009-replay-from-the-clean-model.md)).
+
+La pantalla del replay, el simulador y el asistente todavía no existen.
 
 ## Ejecutarlo en local
 
@@ -34,7 +38,7 @@ cp .env.example .env
 make up
 ```
 
-Abre http://localhost:8080. `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`.
+Abre http://localhost:8080. `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`, y uno copiado antes de la fase 3 las líneas `POSTGRES_POOL_SIZE`, `REDIS_*` y `REPLAY_*`.
 
 Con el stack levantado, ingiere datos crudos:
 

@@ -13,6 +13,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-10-26 | [03. Phase 1: ingestion](2026-10-26-03-phase-1-ingestion.md) |
 | 2026-10-27 | [01. Telemetry of the latest Grand Prix](2026-10-27-01-latest-grand-prix-telemetry.md) |
 | 2026-10-27 | [02. Phase 2: clean model](2026-10-27-02-phase-2-clean-model.md) |
+| 2026-10-29 | [01. Phase 3: replay API](2026-10-29-01-phase-3-replay-api.md) |
 
 ## Template
 

@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import make_url
 from testcontainers.community.mongodb import MongoDbContainer
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.community.redis import RedisContainer
 
 
 @pytest.fixture
@@ -27,3 +28,9 @@ def postgres_server_uri() -> Iterator[str]:
         # waits out its whole timeout before falling back to IPv4 (2026-10-27).
         url = make_url(container.get_connection_url())
         yield url.set(host="127.0.0.1").render_as_string(hide_password=False)
+
+
+@pytest.fixture(scope="session")
+def redis_server_uri() -> Iterator[str]:
+    with RedisContainer("redis:8") as container:
+        yield f"redis://127.0.0.1:{container.get_exposed_port(container.port)}/0"

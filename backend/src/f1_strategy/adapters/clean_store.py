@@ -1,12 +1,15 @@
-"""The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008)."""
+"""The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), and
+the read of a session's rows for its replay (ADR 0009)."""
 
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
-from dataclasses import astuple
+from dataclasses import astuple, dataclass
 from datetime import datetime
+from enum import StrEnum
 
 from psycopg import AsyncConnection, OperationalError, sql
-from psycopg.rows import TupleRow
+from psycopg.rows import TupleRow, class_row
+from psycopg.types.enum import EnumInfo, register_enum
 from psycopg_pool import AsyncConnectionPool
 
 from f1_strategy.application.transform import (
@@ -17,9 +20,33 @@ from f1_strategy.application.transform import (
     TransientError,
     Version,
 )
-from f1_strategy.domain.clean import CleanRecord, column_names
+from f1_strategy.domain.clean import (
+    CleanRecord,
+    Compound,
+    Flag,
+    FlagScope,
+    Interval,
+    Lap,
+    Overtake,
+    Pit,
+    Position,
+    RaceControl,
+    RaceControlCategory,
+    Stint,
+    TeamRadio,
+    Weather,
+    column_names,
+)
 
 type Pool = AsyncConnectionPool[AsyncConnection[TupleRow]]
+
+# The database enum type of each closed set the replayed tables hold (migration 0002).
+ENUM_TYPES: tuple[tuple[str, type[StrEnum]], ...] = (
+    ("compound", Compound),
+    ("race_control_category", RaceControlCategory),
+    ("flag", Flag),
+    ("flag_scope", FlagScope),
+)
 
 RUN_COLUMNS = (
     "status, input_fingerprint, transform_version, error_kind, loaded_fingerprint, loaded_version"
@@ -209,6 +236,88 @@ class PostgresCleanStore:
                     "now": now,
                 },
             )
+
+
+@dataclass(frozen=True)
+class SessionRows:
+    laps: tuple[Lap, ...]
+    stints: tuple[Stint, ...]
+    pits: tuple[Pit, ...]
+    intervals: tuple[Interval, ...]
+    positions: tuple[Position, ...]
+    race_control: tuple[RaceControl, ...]
+    weather: tuple[Weather, ...]
+    overtakes: tuple[Overtake, ...]
+    team_radio: tuple[TeamRadio, ...]
+
+
+class PostgresReplayRows:
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def is_loaded(self, session_key: int) -> bool:
+        async with self._pool.connection() as connection:
+            return await _is_loaded(connection, session_key)
+
+    async def timeline_rows(self, session_key: int) -> SessionRows | None:
+        """The session's replayed rows, all from one snapshot: a load that commits while they
+        are read is seen whole or not at all."""
+        async with self._pool.connection() as connection, connection.transaction():
+            await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            if not await _is_loaded(connection, session_key):
+                return None
+            await _register_enums(connection)
+            read = _SessionReader(connection, session_key)
+            return SessionRows(
+                laps=await read(Lap, "lap", ("driver_number", "lap_number")),
+                stints=await read(Stint, "stint", ("driver_number", "stint_number")),
+                pits=await read(Pit, "pit", ("driver_number", "lap_number")),
+                intervals=await read(Interval, "interval", ("driver_number", "date")),
+                positions=await read(Position, "position", ("driver_number", "date")),
+                race_control=await read(RaceControl, "race_control", ("seq",)),
+                weather=await read(Weather, "weather", ("date",)),
+                overtakes=await read(
+                    Overtake,
+                    "overtake",
+                    ("date", "overtaking_driver_number", "overtaken_driver_number"),
+                ),
+                team_radio=await read(TeamRadio, "team_radio", ("driver_number", "date")),
+            )
+
+
+async def _is_loaded(connection: AsyncConnection[TupleRow], session_key: int) -> bool:
+    cursor = await connection.execute(
+        "SELECT EXISTS (SELECT 1 FROM session WHERE session_key = %s)", [session_key]
+    )
+    row = await cursor.fetchone()
+    return row is not None and row[0] is True
+
+
+class _SessionReader:
+    def __init__(self, connection: AsyncConnection[TupleRow], session_key: int) -> None:
+        self._connection = connection
+        self._session_key = session_key
+
+    async def __call__[T: CleanRecord](
+        self, row_type: type[T], table: str, order_by: tuple[str, ...]
+    ) -> tuple[T, ...]:
+        statement = sql.SQL("SELECT {columns} FROM {table} WHERE session_key = %s ORDER BY {key}")
+        query = statement.format(
+            columns=_identifiers(column_names(row_type)),
+            table=sql.Identifier(table),
+            key=_identifiers(order_by),
+        )
+        async with self._connection.cursor(row_factory=class_row(row_type)) as cursor:
+            await cursor.execute(query, [self._session_key])
+            return tuple(await cursor.fetchall())
+
+
+async def _register_enums(connection: AsyncConnection[TupleRow]) -> None:
+    for type_name, enum in ENUM_TYPES:
+        info = await EnumInfo.fetch(connection, type_name)
+        if info is None:
+            raise LookupError(f"enum type {type_name} is not in the database; run the migrations")
+        register_enum(info, connection, enum, mapping={member: member.value for member in enum})
 
 
 def _state(row: tuple[object, ...]) -> RunState:
