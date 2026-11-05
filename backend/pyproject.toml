@@ -115,7 +115,9 @@ ignore_imports = [
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.170.14",
     "import-linter>=2.15",
+    "mutmut>=3.8.1",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
@@ -123,3 +125,17 @@ dev = [
     "testcontainers[mongodb,postgres,redis]>=4.13",
 ]
 
+[tool.mutmut]
+paths_to_mutate = ["src/f1_strategy/domain/"]
+# The use case tests import the application layer, which is copied but not mutated.
+also_copy = ["src/f1_strategy/application/"]
+pytest_add_cli_args = ["--no-cov", "-p", "no:cacheprovider"]
+pytest_add_cli_args_test_selection = [
+    "tests/test_domain_clean.py",
+    "tests/test_domain_openf1.py",
+    "tests/test_domain_playback.py",
+    "tests/test_domain_replay.py",
+    "tests/test_ingestion.py",
+    "tests/test_replay.py",
+    "tests/test_transform.py",
+]

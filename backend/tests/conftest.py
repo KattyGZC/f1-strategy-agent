@@ -2,10 +2,15 @@ import asyncio
 from collections.abc import Iterator
 
 import pytest
+from hypothesis import settings
 from sqlalchemy import make_url
 from testcontainers.community.mongodb import MongoDbContainer
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.community.redis import RedisContainer
+
+# The same examples on every run and machine, so a red property reproduces as it was seen.
+settings.register_profile("deterministic", derandomize=True, database=None)
+settings.load_profile("deterministic")
 
 
 @pytest.fixture
