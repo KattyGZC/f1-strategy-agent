@@ -16,6 +16,10 @@ function respondWith(body: unknown, status: number): typeof fetch {
     )
 }
 
+const failingFetch: typeof fetch = () => Promise.reject(new TypeError('network down'))
+
+const neverAnsweringFetch: typeof fetch = () => new Promise(() => {})
+
 describe('HealthStatus', () => {
   it('shows the status the API returns', async () => {
     render(
@@ -35,8 +39,6 @@ describe('HealthStatus', () => {
   })
 
   it('reports the API as unreachable when the request fails', async () => {
-    const failingFetch: typeof fetch = () => Promise.reject(new TypeError('network down'))
-
     render(<HealthStatus client={createApiClient(API_ORIGIN, failingFetch)} />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/^API unreachable$/)
@@ -59,9 +61,7 @@ describe('HealthStatus', () => {
   })
 
   it('shows a loading message before the API answers', () => {
-    const pendingFetch: typeof fetch = () => new Promise(() => {})
-
-    render(<HealthStatus client={createApiClient(API_ORIGIN, pendingFetch)} />)
+    render(<HealthStatus client={createApiClient(API_ORIGIN, neverAnsweringFetch)} />)
 
     expect(screen.getByText('Checking the API...')).toBeInTheDocument()
   })

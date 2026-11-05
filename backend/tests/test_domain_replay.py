@@ -5,6 +5,8 @@ from decimal import Decimal
 from itertools import pairwise
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from f1_strategy.domain.clean import (
     CleanSession,
@@ -68,7 +70,15 @@ def race_control(seq: int, at: datetime = T0) -> RaceControl:
 
 def weather(at: datetime = T0) -> Weather:
     return Weather(
-        SESSION, at, Decimal(25), Decimal(30), Decimal(50), Decimal(1013), False, Decimal(1), 90
+        SESSION,
+        at,
+        Decimal(25),
+        Decimal(30),
+        Decimal(50),
+        Decimal(1013),
+        rainfall=False,
+        wind_speed=Decimal(1),
+        wind_direction=90,
     )
 
 
@@ -233,3 +243,48 @@ def test_the_order_of_rows_does_not_change_the_timeline(seed: int) -> None:
     clean = clean_session(sample(RACE).raw())
 
     assert timeline(shuffled(clean, seed)) == timeline(clean)
+
+
+# Few instants and drivers, so most rows tie on the instant and the kind and only the row key
+# decides. Each table is unique on its order key, as the clean schema makes it.
+INSTANTS = st.sampled_from([T0 + timedelta(seconds=offset_s) for offset_s in range(3)])
+DRIVERS = st.sampled_from([1, 16, 44])
+
+
+TYING_ROWS = st.builds(
+    Rows,
+    laps=st.lists(
+        st.builds(
+            lap,
+            DRIVERS,
+            st.integers(1, 3),
+            date_start=INSTANTS,
+            lap_duration=st.sampled_from([Decimal(1), Decimal(2)]),
+        ),
+        unique_by=lambda row: (row.driver_number, row.lap_number),
+    ),
+    positions=st.lists(
+        st.builds(position, DRIVERS, INSTANTS), unique_by=lambda row: (row.driver_number, row.date)
+    ),
+    race_control=st.lists(
+        st.builds(race_control, st.integers(0, 5), INSTANTS), unique_by=lambda row: row.seq
+    ),
+    weather=st.lists(st.builds(weather, INSTANTS), unique_by=lambda row: row.date),
+    overtakes=st.lists(
+        st.builds(Overtake, st.just(SESSION), INSTANTS, DRIVERS, DRIVERS, st.just(1)),
+        unique_by=lambda row: (row.date, row.overtaking_driver_number, row.overtaken_driver_number),
+    ),
+    team_radio=st.lists(
+        st.builds(TeamRadio, st.just(SESSION), DRIVERS, INSTANTS, st.just("u")),
+        unique_by=lambda row: (row.driver_number, row.date),
+    ),
+)
+
+
+@given(rows=TYING_ROWS, data=st.data())
+def test_any_arrival_order_gives_the_same_timeline(rows: Rows, data: st.DataObject) -> None:
+    arrived = Rows(
+        **{name: data.draw(st.permutations(table)) for name, table in vars(rows).items()}
+    )
+
+    assert timeline(arrived) == timeline(rows)

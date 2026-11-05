@@ -141,7 +141,7 @@ class PostgresCleanStore:
     async def runs(self, session_keys: Collection[int]) -> dict[int, RunState]:
         async with self._pool.connection() as connection:
             cursor = await connection.execute(
-                f"SELECT session_key, {RUN_COLUMNS} FROM transform_run "  # noqa: S608
+                f"SELECT session_key, {RUN_COLUMNS} FROM transform_run "  # noqa: S608 - RUN_COLUMNS is a constant
                 "WHERE session_key = ANY(%s)",
                 [list(session_keys)],
             )
@@ -168,7 +168,7 @@ class PostgresCleanStore:
                 await connection.commit()
                 async with connection.transaction():
                     cursor = await connection.execute(
-                        f"SELECT {RUN_COLUMNS} FROM transform_run "  # noqa: S608
+                        f"SELECT {RUN_COLUMNS} FROM transform_run "  # noqa: S608 - RUN_COLUMNS is a constant
                         "WHERE session_key = %s FOR UPDATE SKIP LOCKED",
                         [session_key],
                     )

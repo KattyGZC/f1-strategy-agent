@@ -90,7 +90,7 @@ def stored(postgres_uri: str, session: CleanSession) -> dict[str, set[tuple[obje
                 session.meeting.meeting_key if table == "meeting" else session.session.session_key
             )
             cursor = connection.execute(
-                f"SELECT {columns} FROM {table} WHERE {key} = %s",  # noqa: S608
+                f"SELECT {columns} FROM {table} WHERE {key} = %s",  # noqa: S608 - names come from the test, values are bound
                 [value],
             )
             read[table] = set(cursor.fetchall())

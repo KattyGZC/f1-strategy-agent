@@ -24,10 +24,29 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF", "ASYNC", "DTZ", "PT", "PL", "ANN", "S", "TID"]
+select = [
+    "E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF", "ASYNC", "DTZ", "PT", "PL", "ANN", "S", "TID",
+    "ERA", "FIX", "TD", "BLE", "TRY", "C90", "ARG", "T20", "RET", "FBT", "PIE", "C4", "PERF",
+    "PLR1702",
+]
+# TRY003 asks for one exception class per message; AGENTS.md wants the message to name what is
+# missing, so the context stays in the raise.
+ignore = ["TRY003"]
+preview = true
+explicit-preview-rules = true
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004"]
+# Fakes keep the signature of the port they stand in for, whether they use every argument or not.
+"tests/**" = ["S101", "PLR2004", "ARG002"]
+# The CLI's output is its stdout and stderr.
+"src/f1_strategy/adapters/cli.py" = ["T201"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
+[tool.ruff.lint.pylint]
+max-statements = 40
+max-nested-blocks = 3
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -53,6 +72,7 @@ exclude_also = ['if __name__ == "__main__":']
 
 [tool.importlinter]
 root_package = "f1_strategy"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Inner layers never import outer ones"
@@ -63,12 +83,59 @@ layers = [
     "f1_strategy.domain",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Domain and application import no SDK or framework"
+type = "forbidden"
+source_modules = ["f1_strategy.domain", "f1_strategy.application"]
+forbidden_modules = [
+    "alembic", "fastapi", "httpx2", "psycopg", "psycopg_pool", "pydantic", "pydantic_settings",
+    "pymongo", "redis", "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Each SDK is imported by its own adapter only"
+type = "forbidden"
+source_modules = ["f1_strategy"]
+forbidden_modules = [
+    "alembic", "fastapi", "httpx2", "psycopg", "psycopg_pool", "pydantic_settings", "pymongo",
+    "redis",
+]
+allow_indirect_imports = true
+ignore_imports = [
+    "f1_strategy.adapters.migrate -> alembic",
+    "f1_strategy.adapters.migrations.** -> alembic",
+    "f1_strategy.adapters.http.** -> fastapi",
+    "f1_strategy.adapters.openf1 -> httpx2",
+    "f1_strategy.adapters.clean_store -> psycopg",
+    "f1_strategy.adapters.clean_store -> psycopg_pool",
+    "f1_strategy.adapters.settings -> pydantic_settings",
+    "f1_strategy.adapters.raw_store -> pymongo",
+    "f1_strategy.adapters.replay_store -> redis",
+]
+
 [dependency-groups]
 dev = [
+    "hypothesis>=6.170.14",
     "import-linter>=2.15",
+    "mutmut>=3.8.1",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.2",
     "testcontainers[mongodb,postgres,redis]>=4.13",
+]
+
+[tool.mutmut]
+paths_to_mutate = ["src/f1_strategy/domain/"]
+# The use case tests import the application layer, which is copied but not mutated.
+also_copy = ["src/f1_strategy/application/"]
+pytest_add_cli_args = ["--no-cov", "-p", "no:cacheprovider"]
+pytest_add_cli_args_test_selection = [
+    "tests/test_domain_clean.py",
+    "tests/test_domain_openf1.py",
+    "tests/test_domain_playback.py",
+    "tests/test_domain_replay.py",
+    "tests/test_ingestion.py",
+    "tests/test_replay.py",
+    "tests/test_transform.py",
 ]

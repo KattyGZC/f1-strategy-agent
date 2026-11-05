@@ -264,7 +264,7 @@ class TransformSeason:
                 return await self._failed(key, version, ErrorKind.PERMANENT, message, now)
             # A failure that is neither bad data nor transient (a constraint the database
             # enforces, a bug) fails this session for good and lets the others run.
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - recorded on the session, not swallowed
                 message = f"{type(error).__name__}: {error}"
                 return await self._failed(key, version, ErrorKind.PERMANENT, message, now)
 

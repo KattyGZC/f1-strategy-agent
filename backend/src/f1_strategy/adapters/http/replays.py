@@ -43,7 +43,7 @@ class ReplayResponse(BaseModel):
 def services(request: Request) -> ReplayServices:
     replays = getattr(request.app.state, "replays", None)
     if not isinstance(replays, ReplayServices):
-        raise RuntimeError("the replay services are not running; start the app with its lifespan")
+        raise RuntimeError("the replay services are not running; start the app with its lifespan")  # noqa: TRY004 - a missing lifespan, not a bad argument
     return replays
 
 

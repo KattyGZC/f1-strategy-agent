@@ -113,8 +113,9 @@ def test_season_fails_with_one_line_naming_the_request_and_keeps_what_was_stored
     assert len(stored) < SEASON_REQUESTS
 
 
+@pytest.mark.usefixtures("database")
 def test_telemetry_of_a_session_that_has_not_settled_exits_1(
-    database: str, capsys: pytest.CaptureFixture[str]
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code = run(["telemetry", "--session-key", "9472"], clock=RACE_END)
 
@@ -170,16 +171,16 @@ def test_telemetry_without_a_session_ingests_the_latest_grand_prix(
     assert sum(key.startswith("car_data?") and "session_key=9472" in key for key in stored) == 8
 
 
-def test_missing_configuration_fails_before_any_request(
-    database: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+@pytest.mark.usefixtures("database")
+def test_missing_configuration_fails_before_any_request(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONGO_URI")
 
     with pytest.raises(ValidationError, match="mongo_uri"):
         run(["season", "--year", "2024"])
 
 
-def test_an_unknown_session_type_is_rejected_by_the_parser(database: str) -> None:
+@pytest.mark.usefixtures("database")
+def test_an_unknown_session_type_is_rejected_by_the_parser() -> None:
     with pytest.raises(SystemExit) as exit_info:
         run(["season", "--year", "2024", "--session-type", "Sprint"])
 
@@ -252,9 +253,8 @@ def test_transform_exits_1_naming_each_failed_session(
     )
 
 
-def test_transform_of_a_season_not_ingested_exits_1(
-    clean_database: str, capsys: pytest.CaptureFixture[str]
-) -> None:
+@pytest.mark.usefixtures("clean_database")
+def test_transform_of_a_season_not_ingested_exits_1(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = run(["transform", "--year", "2024"])
 
     assert exit_code == 1

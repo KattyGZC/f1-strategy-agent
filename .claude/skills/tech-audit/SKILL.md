@@ -29,6 +29,11 @@ Read every file in scope. Run the checks in "Before presenting work" (`AGENTS.md
 - A use case that builds its own clients instead of receiving them.
 - Business rules in HTTP routes, SQL, the frontend or a prompt.
 
+**Is every fix through its owner?**
+- `make fast-check` runs the rules a linter can enforce, and the hooks run it before a commit and before the agent stops. What is left for the audit is what no linter sees: a fix around the owner.
+- A race, driver or season special-cased by a literal id (the special-case grep in `.claude/skills/self-grade/SKILL.md`). A retry, a sleep or a `try` added where a cause was not named.
+- A lint suppression whose reason does not hold when you read the line.
+
 **Is the pipeline correct under load and failure?**
 - Blocking I/O in coroutines. Unbounded fan-out. A rate limit enforced by `sleep` in a loop instead of in the adapter.
 - Ingestion that a crash halfway leaves marked as done. Retries without a limit.

@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge)",
+      "Bash(gh pr merge *)",
+      "Bash(gh api *rulesets*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/fast-check.sh\" commit",
+            "timeout": 600,
+            "statusMessage": "make fast-check before the commit"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/fast-check.sh\" stop",
+            "timeout": 600,
+            "statusMessage": "make fast-check before stopping"
+          }
+        ]
+      }
+    ]
+  }
+}

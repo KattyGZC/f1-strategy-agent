@@ -11,7 +11,7 @@ Fase 0, la base:
 - **Backend** (`backend/`): Python 3.12, FastAPI, un endpoint, `GET /api/health`. En capas: dominio, aplicación y adaptadores; `import-linter` rompe el build si una capa interna importa una externa.
 - **Frontend** (`frontend/`): React, Vite y TypeScript en modo estricto. Muestra el estado de la API mediante un cliente generado a partir del esquema OpenAPI del backend.
 - **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, Redis, el backend y el frontend.
-- **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API y una prueba de humo del stack completo.
+- **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API y una prueba de humo del stack completo. `main` recibe cambios solo por pull request con estas comprobaciones en verde; la dueña puede hacer merge con una en rojo (ADR 0010).
 
 Fase 1, la ingesta:
 
@@ -61,10 +61,12 @@ Una sesión cuyos datos crudos aún están incompletos espera a la siguiente eje
 ## Desarrollo
 
 ```sh
-make install   # dependencias del backend y del frontend
-make check     # lint, formato, tipos, reglas de capas, tests con cobertura, build, contrato de la API
-make format    # aplica los formateadores
-make openapi   # regenera el cliente de la API del frontend tras cambiar un endpoint
+make install    # dependencias del backend y del frontend
+make check      # lint, formato, tipos, reglas de capas, tests con cobertura, build, contrato de la API
+make fast-check # la mitad estática de make check, en un minuto; Claude Code la corre antes de un commit
+make mutation   # pruebas de mutación del dominio en un contenedor Linux (Docker, unos tres minutos)
+make format     # aplica los formateadores
+make openapi    # regenera el cliente de la API del frontend tras cambiar un endpoint
 ```
 
 ## Cómo se construye

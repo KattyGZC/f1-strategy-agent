@@ -4,13 +4,16 @@ import sys
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from datetime import UTC, datetime, timedelta
 
-import httpx2
-from pymongo import AsyncMongoClient
-
 from f1_strategy.adapters.clean_store import PostgresCleanStore, connection_pool
-from f1_strategy.adapters.openf1 import OpenF1Client, OpenF1Error
+from f1_strategy.adapters.openf1 import (
+    HttpTransport,
+    OpenF1Client,
+    OpenF1Error,
+    OpenF1Http,
+    openf1_http,
+)
 from f1_strategy.adapters.rate_limit import RateLimit, SlidingWindowRateLimiter
-from f1_strategy.adapters.raw_store import MongoDocument, MongoRawStore
+from f1_strategy.adapters.raw_store import MongoClient, MongoRawStore, mongo_client
 from f1_strategy.adapters.settings import Settings
 from f1_strategy.application.ingestion import (
     IngestionReport,
@@ -47,7 +50,7 @@ EXPECTED_FAILURES = (
 
 type Clock = Callable[[], datetime]
 type Command = Callable[
-    [argparse.Namespace, Settings, httpx2.AsyncBaseTransport | None, Clock],
+    [argparse.Namespace, Settings, HttpTransport | None, Clock],
     Coroutine[object, object, int],
 ]
 type Ingest = Callable[
@@ -61,7 +64,7 @@ def _utc_now() -> datetime:
 
 def main(
     argv: Sequence[str] | None = None,
-    transport: httpx2.AsyncBaseTransport | None = None,
+    transport: HttpTransport | None = None,
     clock: Clock = _utc_now,
 ) -> int:
     args = _parser().parse_args(argv)
@@ -114,16 +117,12 @@ def _season_arguments(parser: argparse.ArgumentParser) -> None:
 async def _ingest(
     args: argparse.Namespace,
     settings: Settings,
-    transport: httpx2.AsyncBaseTransport | None,
+    transport: HttpTransport | None,
     clock: Clock,
 ) -> int:
     async with (
         _mongo(settings) as mongo,
-        httpx2.AsyncClient(
-            base_url=str(settings.openf1_base_url),
-            timeout=settings.openf1_timeout_s,
-            transport=transport,
-        ) as http,
+        openf1_http(str(settings.openf1_base_url), settings.openf1_timeout_s, transport) as http,
     ):
         source = _source(http, settings, clock)
         store = MongoRawStore(mongo, settings.mongo_database)
@@ -137,7 +136,7 @@ async def _ingest(
 async def _transform(
     args: argparse.Namespace,
     settings: Settings,
-    _transport: httpx2.AsyncBaseTransport | None,
+    _transport: HttpTransport | None,
     clock: Clock,
 ) -> int:
     pool = connection_pool(
@@ -164,8 +163,8 @@ async def _transform(
     return 1 if report.failures else 0
 
 
-def _mongo(settings: Settings) -> AsyncMongoClient[MongoDocument]:
-    return AsyncMongoClient(settings.mongo_uri.get_secret_value(), tz_aware=True)
+def _mongo(settings: Settings) -> MongoClient:
+    return mongo_client(settings.mongo_uri.get_secret_value())
 
 
 async def _ingest_season(
@@ -204,7 +203,7 @@ async def _ingest_telemetry(
     return await IngestSessionTelemetry(*adapters)(args.session_key, now)
 
 
-def _source(http: httpx2.AsyncClient, settings: Settings, clock: Clock) -> OpenF1Client:
+def _source(http: OpenF1Http, settings: Settings, clock: Clock) -> OpenF1Client:
     limiter = SlidingWindowRateLimiter(
         [
             RateLimit(settings.openf1_requests_per_second, SECOND_S),

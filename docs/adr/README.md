@@ -13,6 +13,7 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0007](0007-telemetry-of-the-latest-grand-prix.md) | Telemetry of the latest settled Grand Prix, one session kept | Accepted |
 | [0008](0008-deterministic-clean-model.md) | A deterministic clean model: one transaction per session, replaced whole | Accepted |
 | [0009](0009-replay-from-the-clean-model.md) | Replay from the clean model, through Redis Streams, to the browser over SSE | Accepted |
+| [0010](0010-quality-gates.md) | Quality gates: the agent cannot commit red, main cannot merge red except by its owner | Accepted |
 
 ## Template
 
