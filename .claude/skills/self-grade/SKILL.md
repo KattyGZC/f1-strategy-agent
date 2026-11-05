@@ -50,6 +50,9 @@ git diff main...HEAD -U0 -- '*.py' '*.ts' '*.tsx' | grep -E "^\+.*(#|//|/\*)" | 
 # Unbounded fan-out: each hit needs a named bound
 git grep -nE "asyncio\.gather\(\*|create_task\(" -- '*.py'
 
+# One race, driver or season special-cased: each hit must be a closed set from the source, or it is a patch
+git grep -nE "(session_key|driver_number|meeting_key|year|lap_number)\s*(==|!=| in | not in )\s*([1-9]|\(|\[|\{)" -- 'backend/src/*.py' 'frontend/src/*.ts' 'frontend/src/*.tsx'
+
 # Secrets in the diff: must print nothing
 git diff main...HEAD | grep -nEi "(api[_-]?key|secret|password|token)\s*[:=]\s*['\"][^'\"<]{8,}"
 

@@ -1,5 +1,7 @@
 COMPOSE := docker compose --env-file .env -f infra/compose.yaml
 OPENAPI_TMP := .openapi-check
+# A lint suppression with nothing after its codes: each one must say why, after a dash.
+UNEXPLAINED_SUPPRESSION := (\# noqa(: [A-Z0-9, ]+)?|\# type: ignore(\[[^]]*\])?|oxlint-disable[a-z-]*( [a-z/-]+)?|@ts-(ignore|expect-error))[[:space:]]*$$
 CLI := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
 # mutmut needs fork(), so it runs on Linux in a throwaway container, on every host the same way.
 MUTATION_IMAGE := ghcr.io/astral-sh/uv:0.13.5-python3.12-trixie-slim
@@ -8,7 +10,7 @@ MUTATION_STEPS := mkdir /work \
 	&& cd /work && uv sync --locked --quiet && uv run mutmut run && uv run mutmut results
 MIGRATE := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.migrate
 
-.PHONY: install check backend-check frontend-check mutation openapi openapi-check format up down logs migrate ingest ingest-telemetry transform
+.PHONY: install check fast-check backend-static backend-check frontend-static frontend-check mutation openapi openapi-check format up down logs migrate ingest ingest-telemetry transform
 
 install:
 	cd backend && uv sync --locked
@@ -16,18 +18,26 @@ install:
 
 check: backend-check frontend-check openapi-check
 
-backend-check:
+fast-check: backend-static frontend-static
+
+backend-static:
+	if git grep --untracked -nE '$(UNEXPLAINED_SUPPRESSION)' -- backend; then exit 1; fi
 	cd backend && uv run ruff check .
 	cd backend && uv run ruff format --check .
 	cd backend && uv run mypy
 	cd backend && uv run lint-imports
+
+backend-check: backend-static
 	cd backend && uv run pytest
 	cd backend && uv build --quiet
 
-frontend-check:
+frontend-static:
+	if git grep --untracked -nE '$(UNEXPLAINED_SUPPRESSION)' -- frontend/src; then exit 1; fi
 	cd frontend && npm run -s lint
 	cd frontend && npm run -s format:check
 	cd frontend && npm run -s typecheck
+
+frontend-check: frontend-static
 	cd frontend && npm run -s test
 	cd frontend && npm run -s build
 
