@@ -402,7 +402,7 @@ def input_fingerprint(
     return hashlib.sha256("\n".join([*context, *lines]).encode()).hexdigest()
 
 
-def column_names(row_type: type[CleanRecord]) -> tuple[str, ...]:
+def column_names[T: CleanRecord](row_type: type[T]) -> tuple[str, ...]:
     return tuple(field.name for field in fields(row_type))
 
 

@@ -7,7 +7,12 @@ import psycopg
 import pytest
 from psycopg import errors
 
-from f1_strategy.adapters.clean_store import Pool, PostgresCleanStore, connection_pool
+from f1_strategy.adapters.clean_store import (
+    Pool,
+    PostgresCleanStore,
+    PostgresReplayRows,
+    connection_pool,
+)
 from f1_strategy.adapters.migrate import upgrade
 from f1_strategy.application.transform import (
     ErrorKind,
@@ -20,10 +25,15 @@ from f1_strategy.application.transform import (
 from f1_strategy.domain.clean import (
     CleanRecord,
     CleanSession,
+    Compound,
+    Flag,
+    FlagScope,
+    RaceControlCategory,
     clean_session,
     column_names,
     content_hash,
 )
+from f1_strategy.domain.replay import timeline
 from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
 from tests.samples import QUALIFYING, RACE, sample
 
@@ -282,3 +292,81 @@ async def test_a_load_after_a_failure_clears_the_error(
 
     run = run_row(postgres_uri, RACE_KEY)
     assert (run["status"], run["attempts"], run["error_kind"]) == ("succeeded", 0, None)
+
+
+REPLAYED_TABLES = (
+    "laps",
+    "stints",
+    "pits",
+    "intervals",
+    "positions",
+    "race_control",
+    "weather",
+    "overtakes",
+    "team_radio",
+)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("key", [RACE, QUALIFYING])
+async def test_a_loaded_session_reads_back_as_its_replayed_rows(
+    store: PostgresCleanStore, postgres_uri: str, key: str
+) -> None:
+    session = clean(key)
+    await load_session(store, clean(QUALIFYING if key == RACE else RACE))
+    await load_session(store, session)
+    pool: Pool = connection_pool(postgres_uri, max_size=1, connect_timeout_s=CONNECT_TIMEOUT_S)
+    async with pool:
+        rows = await PostgresReplayRows(pool).timeline_rows(session.session.session_key)
+
+    assert rows is not None
+    for table in REPLAYED_TABLES:
+        assert getattr(rows, table) == getattr(session, table), table
+    assert timeline(rows) == timeline(session)
+
+
+@pytest.mark.anyio
+async def test_closed_sets_read_back_as_their_enums(
+    store: PostgresCleanStore, postgres_uri: str
+) -> None:
+    session = clean(RACE)
+    await load_session(store, session)
+    pool: Pool = connection_pool(postgres_uri, max_size=1, connect_timeout_s=CONNECT_TIMEOUT_S)
+    async with pool:
+        rows = await PostgresReplayRows(pool).timeline_rows(RACE_KEY)
+
+    assert rows is not None
+    assert {type(stint.compound) for stint in rows.stints} == {Compound}
+    assert {type(row.category) for row in rows.race_control} == {RaceControlCategory}
+    flagged = [row for row in rows.race_control if row.flag is not None]
+    assert flagged
+    assert {(type(row.flag), type(row.scope)) for row in flagged} == {(Flag, FlagScope)}
+
+
+@pytest.mark.anyio
+async def test_a_session_is_replayable_only_once_loaded(
+    store: PostgresCleanStore, postgres_uri: str
+) -> None:
+    pool: Pool = connection_pool(postgres_uri, max_size=1, connect_timeout_s=CONNECT_TIMEOUT_S)
+    async with pool:
+        replay_rows = PostgresReplayRows(pool)
+        before = (await replay_rows.is_loaded(RACE_KEY), await replay_rows.timeline_rows(RACE_KEY))
+        await load_session(store, clean(RACE))
+        after = await replay_rows.is_loaded(RACE_KEY)
+
+    assert before == (False, None)
+    assert after is True
+
+
+@pytest.mark.anyio
+async def test_a_database_missing_an_enum_type_fails_the_read_by_name(
+    store: PostgresCleanStore, postgres_uri: str
+) -> None:
+    await load_session(store, clean(RACE))
+    with psycopg.connect(postgres_uri, autocommit=True) as connection:
+        connection.execute("ALTER TYPE flag_scope RENAME TO renamed_scope")
+    pool: Pool = connection_pool(postgres_uri, max_size=1, connect_timeout_s=CONNECT_TIMEOUT_S)
+
+    async with pool:
+        with pytest.raises(LookupError, match="enum type flag_scope is not in the database"):
+            await PostgresReplayRows(pool).timeline_rows(RACE_KEY)
