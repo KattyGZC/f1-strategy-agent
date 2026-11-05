@@ -57,6 +57,8 @@ class Param(StrEnum):
 COMPARISON_PARAMS = frozenset(
     {Param.DATE_FROM, Param.DATE_BEFORE, Param.DATE_START_BEFORE, Param.DATE_END_BEFORE}
 )
+# quote() leaves "/" as it is unless told otherwise; a query value is encoded whole.
+NOTHING_SAFE = ""
 
 
 SESSION_ENDPOINTS: Mapping[SessionType, tuple[Endpoint, ...]] = {
@@ -126,7 +128,7 @@ class RawRequest:
 
 def _query_term(param: Param, value: ParamValue) -> str:
     separator = "" if param in COMPARISON_PARAMS else "="
-    return f"{param}{separator}{quote(str(value), safe='')}"
+    return f"{param}{separator}{quote(str(value), safe=NOTHING_SAFE)}"
 
 
 @dataclass(frozen=True)

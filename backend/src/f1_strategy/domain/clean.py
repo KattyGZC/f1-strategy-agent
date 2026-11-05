@@ -363,7 +363,8 @@ def clean_session(raw: RawSession) -> CleanSession:
         ),
         weather=_sorted(Endpoint.WEATHER, parse(Endpoint.WEATHER, _weather), _date),
         results=_sorted(Endpoint.SESSION_RESULT, results, _driver_key),
-        qualifying_phases=_sorted(Endpoint.SESSION_RESULT, phases, _driver_phase),
+        # Unique because the results are: each result has one row per phase.
+        qualifying_phases=tuple(sorted(phases, key=_driver_phase)),
         starting_grid=_sorted(
             Endpoint.STARTING_GRID, parse(Endpoint.STARTING_GRID, _grid), _driver_key
         ),
@@ -475,8 +476,8 @@ class _Reader:
             return None
         if isinstance(value, bool) or not isinstance(value, int | float):
             self.fail(f"{name} must be a number, got {value!r}")
-        # repr is the shortest text that reads back as the same float: 91.234, not 91.2339999...
-        return Decimal(repr(value)) if isinstance(value, float) else Decimal(value)
+        # repr is the shortest text that reads back as the same number: 91.234, not 91.2339999...
+        return Decimal(repr(value))
 
     def utc(self, name: str) -> datetime:
         value = self.opt_utc(name)
@@ -738,11 +739,11 @@ def _phases(part: _ResultParts) -> list[QualifyingPhaseResult]:
         QualifyingPhaseResult(
             session_key=row.integer("session_key"),
             driver_number=row.integer("driver_number"),
-            phase=phase,
-            duration=row.to_decimal("duration", duration),
-            gap_to_leader_s=row.to_decimal("gap_to_leader", gap),
+            phase=index + 1,
+            duration=row.to_decimal("duration", durations[index]),
+            gap_to_leader_s=row.to_decimal("gap_to_leader", gaps[index]),
         )
-        for phase, (duration, gap) in enumerate(zip(durations, gaps, strict=True), 1)
+        for index in range(QUALIFYING_PHASES)
     ]
 
 
