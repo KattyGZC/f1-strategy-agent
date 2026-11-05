@@ -32,6 +32,16 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:8
+    # Replays are throwaway and rebuilt from the clean model, so nothing is written to disk.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ../backend
     environment:
@@ -51,10 +61,20 @@ services:
       TRANSFORM_MAX_CONCURRENCY: ${TRANSFORM_MAX_CONCURRENCY:?}
       TRANSFORM_MAX_ATTEMPTS: ${TRANSFORM_MAX_ATTEMPTS:?}
       TRANSFORM_BACKOFF_BASE_S: ${TRANSFORM_BACKOFF_BASE_S:?}
+      POSTGRES_POOL_SIZE: ${POSTGRES_POOL_SIZE:?}
+      REDIS_URI: redis://redis:6379/0
+      REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:?}
+      REDIS_TIMEOUT_S: ${REDIS_TIMEOUT_S:?}
+      REPLAY_MAX_ACTIVE: ${REPLAY_MAX_ACTIVE:?}
+      REPLAY_IDLE_TTL_S: ${REPLAY_IDLE_TTL_S:?}
+      REPLAY_TICK_S: ${REPLAY_TICK_S:?}
+      REPLAY_LEASE_S: ${REPLAY_LEASE_S:?}
     depends_on:
       postgres:
         condition: service_healthy
       mongo:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"
