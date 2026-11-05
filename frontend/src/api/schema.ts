@@ -21,10 +21,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/replays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Replay */
+        post: operations["start_replay_api_replays_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/replays/{replay_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Replay */
+        get: operations["read_replay_api_replays__replay_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/replays/{replay_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watch Replay
+         * @description The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each
+         *     event's SSE `event` is its `kind`; the stream ends with `replay_failed` if the replay
+         *     fails, and when the replay expires.
+         */
+        get: operations["watch_replay_api_replays__replay_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/replays/{replay_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Replay */
+        post: operations["pause_replay_api_replays__replay_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/replays/{replay_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Replay */
+        post: operations["resume_replay_api_replays__replay_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/replays/{replay_id}/speed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Replay Speed */
+        put: operations["set_replay_speed_api_replays__replay_id__speed_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Compound
+         * @enum {string}
+         */
+        Compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN";
+        /** ErrorResponse */
+        ErrorResponse: {
+            /** Detail */
+            detail: string;
+        };
+        /**
+         * Flag
+         * @enum {string}
+         */
+        Flag: "GREEN" | "YELLOW" | "DOUBLE YELLOW" | "RED" | "BLUE" | "CLEAR" | "CHEQUERED" | "BLACK AND WHITE";
+        /**
+         * FlagScope
+         * @enum {string}
+         */
+        FlagScope: "Track" | "Sector" | "Driver";
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** HealthResponse */
         HealthResponse: {
             /**
@@ -32,6 +164,291 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** IntervalEvent */
+        IntervalEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Driver Number */
+            driver_number: number;
+            /** Gap To Leader Laps */
+            gap_to_leader_laps: number | null;
+            /** Gap To Leader S */
+            gap_to_leader_s: number | null;
+            /** Interval Laps */
+            interval_laps: number | null;
+            /** Interval S */
+            interval_s: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "interval";
+        };
+        /** LapEvent */
+        LapEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            compound: components["schemas"]["Compound"] | null;
+            /** Driver Number */
+            driver_number: number;
+            /** Duration Sector 1 */
+            duration_sector_1: number | null;
+            /** Duration Sector 2 */
+            duration_sector_2: number | null;
+            /** Duration Sector 3 */
+            duration_sector_3: number | null;
+            /** I1 Speed */
+            i1_speed: number | null;
+            /** I2 Speed */
+            i2_speed: number | null;
+            /** Is Pit Out Lap */
+            is_pit_out_lap: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "lap";
+            /** Lap Duration */
+            lap_duration: number | null;
+            /** Lap Number */
+            lap_number: number;
+            /** St Speed */
+            st_speed: number | null;
+            /** Tyre Age Laps */
+            tyre_age_laps: number | null;
+        };
+        /** OvertakeEvent */
+        OvertakeEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "overtake";
+            /** Overtaken Driver Number */
+            overtaken_driver_number: number;
+            /** Overtaking Driver Number */
+            overtaking_driver_number: number;
+            /** Position */
+            position: number;
+        };
+        /** PitEvent */
+        PitEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Driver Number */
+            driver_number: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "pit";
+            /** Lane Duration */
+            lane_duration: number | null;
+            /** Lap Number */
+            lap_number: number;
+            /** Stop Duration */
+            stop_duration: number | null;
+        };
+        /**
+         * PlaybackStatus
+         * @enum {string}
+         */
+        PlaybackStatus: "playing" | "paused";
+        /** PositionEvent */
+        PositionEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Driver Number */
+            driver_number: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "position";
+            /** Position */
+            position: number;
+        };
+        /**
+         * RaceControlCategory
+         * @enum {string}
+         */
+        RaceControlCategory: "Flag" | "Other" | "SessionStatus" | "Drs" | "SafetyCar" | "CarEvent";
+        /** RaceControlEvent */
+        RaceControlEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            category: components["schemas"]["RaceControlCategory"];
+            /** Driver Number */
+            driver_number: number | null;
+            flag: components["schemas"]["Flag"] | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "race_control";
+            /** Lap Number */
+            lap_number: number | null;
+            /** Message */
+            message: string;
+            /** Qualifying Phase */
+            qualifying_phase: number | null;
+            scope: components["schemas"]["FlagScope"] | null;
+            /** Sector */
+            sector: number | null;
+            /** Seq */
+            seq: number;
+        };
+        ReplayEvent: components["schemas"]["RaceControlEvent"] | components["schemas"]["WeatherEvent"] | components["schemas"]["PitEvent"] | components["schemas"]["LapEvent"] | components["schemas"]["PositionEvent"] | components["schemas"]["IntervalEvent"] | components["schemas"]["OvertakeEvent"] | components["schemas"]["TeamRadioEvent"];
+        /** ReplayFailedEvent */
+        ReplayFailedEvent: {
+            /**
+             * Kind
+             * @default replay_failed
+             * @constant
+             */
+            kind: "replay_failed";
+            /** Message */
+            message: string;
+        };
+        /** ReplayResponse */
+        ReplayResponse: {
+            /** Failure */
+            failure: string | null;
+            /** Replay Id */
+            replay_id: string;
+            /** Session Key */
+            session_key: number;
+            /**
+             * Session S
+             * @description Seconds since the session's first event, now
+             */
+            session_s: number;
+            speed: components["schemas"]["ReplaySpeed"];
+            status: components["schemas"]["PlaybackStatus"];
+        };
+        /**
+         * ReplaySpeed
+         * @enum {integer}
+         */
+        ReplaySpeed: 1 | 2 | 5 | 10 | 20 | 60;
+        /**
+         * ServerSentEvent
+         * @description Represents a single Server-Sent Event.
+         *
+         *     When `yield`ed from a *path operation function* that uses
+         *     `response_class=EventSourceResponse`, each `ServerSentEvent` is encoded
+         *     into the [SSE wire format](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream)
+         *     (`text/event-stream`).
+         *
+         *     If you yield a plain object (dict, Pydantic model, etc.) instead, it is
+         *     automatically JSON-encoded and sent as the `data:` field.
+         *
+         *     All `data` values **including plain strings** are JSON-serialized.
+         *
+         *     For example, `data="hello"` produces `data: "hello"` on the wire (with
+         *     quotes).
+         */
+        ServerSentEvent: {
+            /** Comment */
+            comment?: string | null;
+            /** Data */
+            data?: unknown;
+            /** Event */
+            event?: string | null;
+            /** Id */
+            id?: string | null;
+            /** Raw Data */
+            raw_data?: string | null;
+            /** Retry */
+            retry?: number | null;
+        };
+        /** SpeedRequest */
+        SpeedRequest: {
+            speed: components["schemas"]["ReplaySpeed"];
+        };
+        /** StartReplayRequest */
+        StartReplayRequest: {
+            /** Session Key */
+            session_key: number;
+            speed: components["schemas"]["ReplaySpeed"];
+        };
+        /** TeamRadioEvent */
+        TeamRadioEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Driver Number */
+            driver_number: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "team_radio";
+            /** Recording Url */
+            recording_url: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
+        /** WeatherEvent */
+        WeatherEvent: {
+            /** Air Temperature */
+            air_temperature: number;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Humidity */
+            humidity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "weather";
+            /** Pressure */
+            pressure: number;
+            /** Rainfall */
+            rainfall: boolean;
+            /** Track Temperature */
+            track_temperature: number;
+            /** Wind Direction */
+            wind_direction: number;
+            /** Wind Speed */
+            wind_speed: number;
         };
     };
     responses: never;
@@ -58,6 +475,263 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    start_replay_api_replays_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_replay_api_replays__replay_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_replay_api_replays__replay_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_replay_api_replays__replay_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_replay_api_replays__replay_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_replay_speed_api_replays__replay_id__speed_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -22,3 +22,14 @@ class Settings(PostgresSettings):
     transform_max_concurrency: int = Field(gt=0)
     transform_max_attempts: int = Field(gt=0)
     transform_backoff_base_s: float = Field(gt=0)
+
+
+class ApiSettings(PostgresSettings):
+    postgres_pool_size: int = Field(gt=0)
+    redis_uri: SecretStr
+    redis_max_connections: int = Field(gt=0)
+    redis_timeout_s: float = Field(gt=0)
+    replay_max_active: int = Field(gt=0)
+    replay_idle_ttl_s: int = Field(gt=0)
+    replay_tick_s: float = Field(gt=0)
+    replay_lease_s: float = Field(gt=0)

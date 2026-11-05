@@ -1,6 +1,67 @@
 {
   "components": {
     "schemas": {
+      "Compound": {
+        "enum": [
+          "SOFT",
+          "MEDIUM",
+          "HARD",
+          "INTERMEDIATE",
+          "WET",
+          "UNKNOWN"
+        ],
+        "title": "Compound",
+        "type": "string"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "Flag": {
+        "enum": [
+          "GREEN",
+          "YELLOW",
+          "DOUBLE YELLOW",
+          "RED",
+          "BLUE",
+          "CLEAR",
+          "CHEQUERED",
+          "BLACK AND WHITE"
+        ],
+        "title": "Flag",
+        "type": "string"
+      },
+      "FlagScope": {
+        "enum": [
+          "Track",
+          "Sector",
+          "Driver"
+        ],
+        "title": "FlagScope",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -13,6 +74,809 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "IntervalEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "driver_number": {
+            "title": "Driver Number",
+            "type": "integer"
+          },
+          "gap_to_leader_laps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap To Leader Laps"
+          },
+          "gap_to_leader_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap To Leader S"
+          },
+          "interval_laps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Laps"
+          },
+          "interval_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval S"
+          },
+          "kind": {
+            "const": "interval",
+            "default": "interval",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "driver_number",
+          "gap_to_leader_s",
+          "gap_to_leader_laps",
+          "interval_s",
+          "interval_laps"
+        ],
+        "title": "IntervalEvent",
+        "type": "object"
+      },
+      "LapEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "compound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Compound"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "driver_number": {
+            "title": "Driver Number",
+            "type": "integer"
+          },
+          "duration_sector_1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sector 1"
+          },
+          "duration_sector_2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sector 2"
+          },
+          "duration_sector_3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sector 3"
+          },
+          "i1_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "I1 Speed"
+          },
+          "i2_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "I2 Speed"
+          },
+          "is_pit_out_lap": {
+            "title": "Is Pit Out Lap",
+            "type": "boolean"
+          },
+          "kind": {
+            "const": "lap",
+            "default": "lap",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lap_duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lap Duration"
+          },
+          "lap_number": {
+            "title": "Lap Number",
+            "type": "integer"
+          },
+          "st_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "St Speed"
+          },
+          "tyre_age_laps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tyre Age Laps"
+          }
+        },
+        "required": [
+          "at",
+          "driver_number",
+          "lap_number",
+          "lap_duration",
+          "duration_sector_1",
+          "duration_sector_2",
+          "duration_sector_3",
+          "i1_speed",
+          "i2_speed",
+          "st_speed",
+          "is_pit_out_lap",
+          "compound",
+          "tyre_age_laps"
+        ],
+        "title": "LapEvent",
+        "type": "object"
+      },
+      "OvertakeEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "const": "overtake",
+            "default": "overtake",
+            "title": "Kind",
+            "type": "string"
+          },
+          "overtaken_driver_number": {
+            "title": "Overtaken Driver Number",
+            "type": "integer"
+          },
+          "overtaking_driver_number": {
+            "title": "Overtaking Driver Number",
+            "type": "integer"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "overtaking_driver_number",
+          "overtaken_driver_number",
+          "position"
+        ],
+        "title": "OvertakeEvent",
+        "type": "object"
+      },
+      "PitEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "driver_number": {
+            "title": "Driver Number",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "pit",
+            "default": "pit",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lane_duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lane Duration"
+          },
+          "lap_number": {
+            "title": "Lap Number",
+            "type": "integer"
+          },
+          "stop_duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Duration"
+          }
+        },
+        "required": [
+          "at",
+          "driver_number",
+          "lap_number",
+          "lane_duration",
+          "stop_duration"
+        ],
+        "title": "PitEvent",
+        "type": "object"
+      },
+      "PlaybackStatus": {
+        "enum": [
+          "playing",
+          "paused"
+        ],
+        "title": "PlaybackStatus",
+        "type": "string"
+      },
+      "PositionEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "driver_number": {
+            "title": "Driver Number",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "position",
+            "default": "position",
+            "title": "Kind",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "driver_number",
+          "position"
+        ],
+        "title": "PositionEvent",
+        "type": "object"
+      },
+      "RaceControlCategory": {
+        "enum": [
+          "Flag",
+          "Other",
+          "SessionStatus",
+          "Drs",
+          "SafetyCar",
+          "CarEvent"
+        ],
+        "title": "RaceControlCategory",
+        "type": "string"
+      },
+      "RaceControlEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/RaceControlCategory"
+          },
+          "driver_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver Number"
+          },
+          "flag": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Flag"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "race_control",
+            "default": "race_control",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lap_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lap Number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "qualifying_phase": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualifying Phase"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlagScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "seq",
+          "category",
+          "flag",
+          "scope",
+          "sector",
+          "driver_number",
+          "lap_number",
+          "qualifying_phase",
+          "message"
+        ],
+        "title": "RaceControlEvent",
+        "type": "object"
+      },
+      "ReplayEvent": {
+        "discriminator": {
+          "mapping": {
+            "interval": "#/components/schemas/IntervalEvent",
+            "lap": "#/components/schemas/LapEvent",
+            "overtake": "#/components/schemas/OvertakeEvent",
+            "pit": "#/components/schemas/PitEvent",
+            "position": "#/components/schemas/PositionEvent",
+            "race_control": "#/components/schemas/RaceControlEvent",
+            "team_radio": "#/components/schemas/TeamRadioEvent",
+            "weather": "#/components/schemas/WeatherEvent"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RaceControlEvent"
+          },
+          {
+            "$ref": "#/components/schemas/WeatherEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PitEvent"
+          },
+          {
+            "$ref": "#/components/schemas/LapEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PositionEvent"
+          },
+          {
+            "$ref": "#/components/schemas/IntervalEvent"
+          },
+          {
+            "$ref": "#/components/schemas/OvertakeEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TeamRadioEvent"
+          }
+        ]
+      },
+      "ReplayFailedEvent": {
+        "properties": {
+          "kind": {
+            "const": "replay_failed",
+            "default": "replay_failed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ReplayFailedEvent",
+        "type": "object"
+      },
+      "ReplayResponse": {
+        "properties": {
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure"
+          },
+          "replay_id": {
+            "title": "Replay Id",
+            "type": "string"
+          },
+          "session_key": {
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "session_s": {
+            "description": "Seconds since the session's first event, now",
+            "title": "Session S",
+            "type": "number"
+          },
+          "speed": {
+            "$ref": "#/components/schemas/ReplaySpeed"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlaybackStatus"
+          }
+        },
+        "required": [
+          "replay_id",
+          "session_key",
+          "status",
+          "speed",
+          "session_s",
+          "failure"
+        ],
+        "title": "ReplayResponse",
+        "type": "object"
+      },
+      "ReplaySpeed": {
+        "enum": [
+          1,
+          2,
+          5,
+          10,
+          20,
+          60
+        ],
+        "title": "ReplaySpeed",
+        "type": "integer"
+      },
+      "ServerSentEvent": {
+        "description": "Represents a single Server-Sent Event.\n\nWhen `yield`ed from a *path operation function* that uses\n`response_class=EventSourceResponse`, each `ServerSentEvent` is encoded\ninto the [SSE wire format](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream)\n(`text/event-stream`).\n\nIf you yield a plain object (dict, Pydantic model, etc.) instead, it is\nautomatically JSON-encoded and sent as the `data:` field.\n\nAll `data` values **including plain strings** are JSON-serialized.\n\nFor example, `data=\"hello\"` produces `data: \"hello\"` on the wire (with\nquotes).",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "data": {
+            "title": "Data"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "raw_data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Data"
+          },
+          "retry": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry"
+          }
+        },
+        "title": "ServerSentEvent",
+        "type": "object"
+      },
+      "SpeedRequest": {
+        "properties": {
+          "speed": {
+            "$ref": "#/components/schemas/ReplaySpeed"
+          }
+        },
+        "required": [
+          "speed"
+        ],
+        "title": "SpeedRequest",
+        "type": "object"
+      },
+      "StartReplayRequest": {
+        "properties": {
+          "session_key": {
+            "exclusiveMinimum": 0.0,
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "speed": {
+            "$ref": "#/components/schemas/ReplaySpeed"
+          }
+        },
+        "required": [
+          "session_key",
+          "speed"
+        ],
+        "title": "StartReplayRequest",
+        "type": "object"
+      },
+      "TeamRadioEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "driver_number": {
+            "title": "Driver Number",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "team_radio",
+            "default": "team_radio",
+            "title": "Kind",
+            "type": "string"
+          },
+          "recording_url": {
+            "title": "Recording Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "driver_number",
+          "recording_url"
+        ],
+        "title": "TeamRadioEvent",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WeatherEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "air_temperature": {
+            "title": "Air Temperature",
+            "type": "number"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "humidity": {
+            "title": "Humidity",
+            "type": "number"
+          },
+          "kind": {
+            "const": "weather",
+            "default": "weather",
+            "title": "Kind",
+            "type": "string"
+          },
+          "pressure": {
+            "title": "Pressure",
+            "type": "number"
+          },
+          "rainfall": {
+            "title": "Rainfall",
+            "type": "boolean"
+          },
+          "track_temperature": {
+            "title": "Track Temperature",
+            "type": "number"
+          },
+          "wind_direction": {
+            "title": "Wind Direction",
+            "type": "integer"
+          },
+          "wind_speed": {
+            "title": "Wind Speed",
+            "type": "number"
+          }
+        },
+        "required": [
+          "at",
+          "air_temperature",
+          "track_temperature",
+          "humidity",
+          "pressure",
+          "rainfall",
+          "wind_speed",
+          "wind_direction"
+        ],
+        "title": "WeatherEvent",
         "type": "object"
       }
     }
@@ -41,6 +905,393 @@
         "summary": "Read Health",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/replays": {
+      "post": {
+        "operationId": "start_replay_api_replays_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Start Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/replays/{replay_id}": {
+      "get": {
+        "operationId": "read_replay_api_replays__replay_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/replays/{replay_id}/events": {
+      "get": {
+        "description": "The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each\nevent's SSE `event` is its `kind`; the stream ends with `replay_failed` if the replay\nfails, and when the replay expires.",
+        "operationId": "watch_replay_api_replays__replay_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d+-\\d+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "properties": {
+                    "data": {
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/ReplayEvent"
+                          },
+                          {
+                            "$ref": "#/components/schemas/ReplayFailedEvent"
+                          },
+                          {
+                            "$ref": "#/components/schemas/ServerSentEvent"
+                          }
+                        ],
+                        "title": "Streamitem Watch Replay Api Replays  Replay Id  Events Get"
+                      },
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Watch Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/replays/{replay_id}/pause": {
+      "post": {
+        "operationId": "pause_replay_api_replays__replay_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/replays/{replay_id}/resume": {
+      "post": {
+        "operationId": "resume_replay_api_replays__replay_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/replays/{replay_id}/speed": {
+      "put": {
+        "operationId": "set_replay_speed_api_replays__replay_id__speed_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Replay Speed",
+        "tags": [
+          "replays"
         ]
       }
     }
