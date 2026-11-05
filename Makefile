@@ -3,11 +3,6 @@ OPENAPI_TMP := .openapi-check
 # A lint suppression with nothing after its codes: each one must say why, after a dash.
 UNEXPLAINED_SUPPRESSION := (\# noqa(: [A-Z0-9, ]+)?|\# type: ignore(\[[^]]*\])?|oxlint-disable[a-z-]*( [a-z/-]+)?|@ts-(ignore|expect-error))[[:space:]]*$$
 CLI := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
-# mutmut needs fork(), so it runs on Linux in a throwaway container, on every host the same way.
-MUTATION_IMAGE := ghcr.io/astral-sh/uv:0.13.5-python3.12-trixie-slim
-MUTATION_STEPS := mkdir /work \
-	&& tar -C /source --exclude=.venv --exclude=mutants --exclude=__pycache__ -cf - . | tar -C /work -xf - \
-	&& cd /work && uv sync --locked --quiet && uv run mutmut run && uv run mutmut results
 MIGRATE := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.migrate
 
 .PHONY: install check fast-check backend-static backend-check frontend-static frontend-check mutation openapi openapi-check format up down logs migrate ingest ingest-telemetry transform
@@ -42,7 +37,7 @@ frontend-check: frontend-static
 	cd frontend && npm run -s build
 
 mutation:
-	docker run --rm -v "$(CURDIR)/backend:/source:ro" $(MUTATION_IMAGE) sh -c '$(MUTATION_STEPS)'
+	sh infra/mutation.sh "$(CURDIR)/backend"
 
 openapi:
 	cd backend && uv run python -m f1_strategy.adapters.http.openapi > ../frontend/openapi.json

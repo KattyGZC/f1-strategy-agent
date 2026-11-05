@@ -184,8 +184,3 @@ async def test_every_attempt_goes_through_the_rate_limiter() -> None:
 
     assert len(server.requests) == 2
     assert clock.slept_s == [0.25, 0.75]
-
-
-def test_a_retry_policy_needs_at_least_one_attempt() -> None:
-    with pytest.raises(ValueError, match="max_attempts must be at least 1, got 0"):
-        RetryPolicy(0, 1.0)

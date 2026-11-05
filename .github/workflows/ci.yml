@@ -71,6 +71,14 @@ jobs:
             echo "::endgroup::"
           done
 
+  mutation:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make mutation
+
   frontend:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
