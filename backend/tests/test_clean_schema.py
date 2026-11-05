@@ -194,11 +194,11 @@ def connection(postgres_uri: str) -> Iterator[psycopg.Connection]:
 def insert(connection: psycopg.Connection, table: str, row: Row) -> None:
     columns = ", ".join(row)
     values = ", ".join(f"%({column})s" for column in row)
-    connection.execute(f"INSERT INTO {table} ({columns}) VALUES ({values})", row)  # noqa: S608
+    connection.execute(f"INSERT INTO {table} ({columns}) VALUES ({values})", row)  # noqa: S608 - names come from the test, values are bound
 
 
 def count(connection: psycopg.Connection, table: str) -> int:
-    row = connection.execute(f"SELECT count(*) FROM {table}").fetchone()  # noqa: S608
+    row = connection.execute(f"SELECT count(*) FROM {table}").fetchone()  # noqa: S608 - the table name comes from the test
     assert row is not None
     return int(row[0])
 

@@ -46,7 +46,7 @@ def insert_run(postgres_uri: str, **overrides: object) -> None:
     columns = ", ".join(row)
     values = ", ".join(f"%({column})s" for column in row)
     with psycopg.connect(postgres_uri, connect_timeout=CONNECT_TIMEOUT_S) as connection:
-        connection.execute(f"INSERT INTO transform_run ({columns}) VALUES ({values})", row)  # noqa: S608
+        connection.execute(f"INSERT INTO transform_run ({columns}) VALUES ({values})", row)  # noqa: S608 - names come from the test, values are bound
 
 
 def test_upgrade_brings_an_empty_database_to_the_latest_migration(postgres_uri: str) -> None:

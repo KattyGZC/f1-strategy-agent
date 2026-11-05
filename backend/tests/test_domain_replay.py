@@ -68,7 +68,15 @@ def race_control(seq: int, at: datetime = T0) -> RaceControl:
 
 def weather(at: datetime = T0) -> Weather:
     return Weather(
-        SESSION, at, Decimal(25), Decimal(30), Decimal(50), Decimal(1013), False, Decimal(1), 90
+        SESSION,
+        at,
+        Decimal(25),
+        Decimal(30),
+        Decimal(50),
+        Decimal(1013),
+        rainfall=False,
+        wind_speed=Decimal(1),
+        wind_direction=90,
     )
 
 

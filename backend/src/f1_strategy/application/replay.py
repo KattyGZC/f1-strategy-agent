@@ -272,7 +272,7 @@ class ReplayProducers:
             return await self._produce(replay_id)
         # One replay's failure is recorded on that replay, where its viewer reads it, and the
         # other replays keep running.
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - recorded on the replay, not swallowed
             failure = f"{type(error).__name__}: {error}"
             await self._store.update(replay_id, lambda state: replace(state, failure=failure))
             return ReplayEnd.FAILED
