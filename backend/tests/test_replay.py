@@ -10,13 +10,18 @@ from f1_strategy.application.replay import (
     ControlReplay,
     ProduceReplay,
     ReplayEnd,
+    ReplayFailure,
     ReplayNotFoundError,
     ReplayPolicy,
     ReplayProducers,
     ReplayState,
+    ReplayStatus,
     SessionNotLoadedError,
     StartReplay,
+    StreamEntry,
+    StreamRead,
     TooManyReplaysError,
+    WatchReplay,
 )
 from f1_strategy.domain.clean import Position, clean_session
 from f1_strategy.domain.playback import Paused, Playing, ReplaySpeed, started
@@ -90,6 +95,7 @@ class MemoryStore:
         self.states: dict[str, ReplayState] = {}
         self.streams: dict[str, list[Sent]] = {}
         self.leases: dict[str, str] = {}
+        self.reads = 0
 
     async def create(self, replay_id: str, state: ReplayState) -> bool:
         if len(self.states) >= self._max_active:
@@ -117,6 +123,20 @@ class MemoryStore:
         assert first_index == len(stream), "an append must continue the stream exactly"
         now_s = self._clock()
         stream.extend(Sent(first_index + i, event, now_s) for i, event in enumerate(events))
+
+    async def read(self, replay_id: str, after: str | None, block_s: float) -> StreamRead | None:
+        assert block_s == POLICY.tick_s
+        if replay_id not in self.states:
+            return None
+        start = 0 if after is None else int(after.removeprefix("0-"))
+        entries = tuple(
+            StreamEntry(f"0-{sent.index + 1}", sent.event.kind, str(sent.index))
+            for sent in self.streams[replay_id][start:]
+        )
+        if not entries:
+            await asyncio.sleep(0)
+        self.reads += 1
+        return StreamRead(self.states[replay_id], entries)
 
     async def hold_lease(self, replay_id: str, owner: str, lease_s: float) -> bool:
         assert lease_s == POLICY.lease_s
@@ -327,27 +347,33 @@ async def test_an_empty_session_finishes_without_sending() -> None:
     assert w.store.times() == []
 
 
-async def test_controls_report_the_new_state() -> None:
+async def test_controls_report_the_new_state_and_session_time() -> None:
     w = world()
     w.begin(ReplaySpeed.X1)
     w.clock.now_s = 1004.0
 
-    assert await w.control.pause(REPLAY) == ReplayState(SESSION, Paused(ReplaySpeed.X1, 4.0))
-    assert await w.control.set_speed(REPLAY, ReplaySpeed.X5) == ReplayState(
-        SESSION, Paused(ReplaySpeed.X5, 4.0)
+    paused_status = await w.control.pause(REPLAY)
+    faster = await w.control.set_speed(REPLAY, ReplaySpeed.X5)
+    resumed_status = await w.control.resume(REPLAY)
+    w.clock.now_s = 1006.0
+    later = await w.control.status(REPLAY)
+
+    assert paused_status == ReplayStatus(ReplayState(SESSION, Paused(ReplaySpeed.X1, 4.0)), 4.0)
+    assert faster == ReplayStatus(ReplayState(SESSION, Paused(ReplaySpeed.X5, 4.0)), 4.0)
+    assert resumed_status == ReplayStatus(
+        ReplayState(SESSION, Playing(ReplaySpeed.X5, 4.0, 1004.0)), 4.0
     )
-    assert await w.control.resume(REPLAY) == ReplayState(
-        SESSION, Playing(ReplaySpeed.X5, 4.0, 1004.0)
-    )
+    assert later == ReplayStatus(ReplayState(SESSION, Playing(ReplaySpeed.X5, 4.0, 1004.0)), 14.0)
 
 
-@pytest.mark.parametrize("control", ["pause", "resume", "set_speed"])
+@pytest.mark.parametrize("control", ["pause", "resume", "set_speed", "status"])
 async def test_a_control_of_an_unknown_replay_fails(control: str) -> None:
     w = world()
     calls = {
         "pause": lambda: w.control.pause("missing"),
         "resume": lambda: w.control.resume("missing"),
         "set_speed": lambda: w.control.set_speed("missing", ReplaySpeed.X2),
+        "status": lambda: w.control.status("missing"),
     }
 
     with pytest.raises(ReplayNotFoundError, match="missing"):
@@ -442,3 +468,80 @@ async def test_closing_the_producers_stops_them_and_frees_their_leases() -> None
 def test_a_tick_must_be_positive_and_shorter_than_the_lease(tick_s: float, lease_s: float) -> None:
     with pytest.raises(ValueError, match="tick_s"):
         ReplayPolicy(tick_s=tick_s, lease_s=lease_s)
+
+
+async def watched(
+    w: World, producers: ReplayProducers, after: str | None, count: int
+) -> list[StreamEntry | ReplayFailure]:
+    entries = await WatchReplay(w.store, producers, POLICY)(REPLAY, after)
+    received: list[StreamEntry | ReplayFailure] = []
+    async for entry in entries:
+        received.append(entry)
+        if len(received) == count:
+            break
+    return received
+
+
+def entry(index: int) -> StreamEntry:
+    kind = timeline(positions_at(OFFSETS_S)).events[index].kind
+    return StreamEntry(f"0-{index + 1}", kind, str(index))
+
+
+async def test_watching_a_replay_starts_its_producer_and_receives_every_event() -> None:
+    w = world()
+    w.begin(ReplaySpeed.X60)
+    producers = ReplayProducers(w.produce, w.store)
+
+    received = await watched(w, producers, None, len(OFFSETS_S))
+
+    assert received == [entry(index) for index in range(len(OFFSETS_S))]
+    await producers.aclose()
+
+
+async def test_watching_again_resumes_after_the_last_entry_seen() -> None:
+    w = world()
+    w.begin(ReplaySpeed.X60)
+    producers = ReplayProducers(w.produce, w.store)
+
+    received = await watched(w, producers, "0-2", 2)
+
+    assert received == [entry(2), entry(3)]
+    await producers.aclose()
+
+
+async def test_a_failed_replay_ends_its_watch_with_the_failure() -> None:
+    w = world()
+    w.store.states[REPLAY] = ReplayState(SESSION, started(ReplaySpeed.X60, 1000.0), "boom")
+    w.store.streams[REPLAY] = []
+    producers = ReplayProducers(w.produce, w.store)
+
+    received = await watched(w, producers, None, 10)
+
+    assert received == [ReplayFailure("boom")]
+    await producers.aclose()
+
+
+async def test_a_watch_ends_when_its_replay_expires() -> None:
+    w = world()
+    w.begin(ReplaySpeed.X60)
+    producers = ReplayProducers(w.produce, w.store)
+    entries = await WatchReplay(w.store, producers, POLICY)(REPLAY, None)
+    received = [await anext(entries)]
+
+    del w.store.states[REPLAY]
+
+    received.extend([item async for item in entries])
+    assert received[0] == entry(0)
+    assert all(isinstance(item, StreamEntry) for item in received)
+    await producers.aclose()
+
+
+async def test_watching_an_unknown_replay_fails_before_any_read() -> None:
+    w = world()
+    producers = ReplayProducers(w.produce, w.store)
+
+    with pytest.raises(ReplayNotFoundError, match="missing"):
+        await WatchReplay(w.store, producers, POLICY)("missing", None)
+
+    assert w.store.reads == 0
+    assert w.store.leases == {}

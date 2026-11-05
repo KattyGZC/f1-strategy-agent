@@ -7,7 +7,7 @@ time is seconds since the epoch, so every backend process reads the same anchor.
 from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 from f1_strategy.domain.replay import Timeline
 
@@ -19,6 +19,11 @@ class ReplaySpeed(IntEnum):
     X10 = 10
     X20 = 20
     X60 = 60
+
+
+class PlaybackStatus(StrEnum):
+    PLAYING = "playing"
+    PAUSED = "paused"
 
 
 @dataclass(frozen=True)

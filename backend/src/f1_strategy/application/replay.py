@@ -5,7 +5,7 @@ appended. What was appended is the progress: a producer that starts again resume
 """
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Protocol
@@ -18,11 +18,12 @@ from f1_strategy.domain.playback import (
     offsets_s,
     paused,
     resumed,
+    session_s_at,
     started,
     wall_s_due,
     with_speed,
 )
-from f1_strategy.domain.replay import Event, Timeline, TimelineRows, timeline
+from f1_strategy.domain.replay import Event, EventKind, Timeline, TimelineRows, timeline
 
 
 class SessionNotLoadedError(LookupError):
@@ -42,6 +43,34 @@ class ReplayState:
     session_key: int
     playback: Playback
     failure: str | None = None
+
+
+@dataclass(frozen=True)
+class ReplayStatus:
+    """A replay as its viewer sees it now: its state and where in its session it is."""
+
+    state: ReplayState
+    session_s: float
+
+
+@dataclass(frozen=True)
+class StreamEntry:
+    """One event as its viewers receive it: the stream's id for it, its kind, and its encoding."""
+
+    entry_id: str
+    kind: EventKind
+    data: str
+
+
+@dataclass(frozen=True)
+class StreamRead:
+    state: ReplayState
+    entries: tuple[StreamEntry, ...]
+
+
+@dataclass(frozen=True)
+class ReplayFailure:
+    message: str
 
 
 class ReplayRows(Protocol):
@@ -69,6 +98,11 @@ class ReplayStore(Protocol):
         ...
 
     async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> None: ...
+
+    async def read(self, replay_id: str, after: str | None, block_s: float) -> StreamRead | None:
+        """The entries after the id `after` (from the start when None), waiting up to `block_s`
+        for one; a read keeps the replay from expiring. None when the replay does not exist."""
+        ...
 
     async def hold_lease(self, replay_id: str, owner: str, lease_s: float) -> bool:
         """Take or renew the producer lease; False when another owner holds it."""
@@ -111,25 +145,37 @@ class ControlReplay:
         self._store = store
         self._clock = clock
 
-    async def pause(self, replay_id: str) -> ReplayState:
-        now = self._clock()
-        return await self._change(replay_id, lambda playback: paused(playback, now))
+    async def status(self, replay_id: str) -> ReplayStatus:
+        state = await self._store.state(replay_id)
+        if state is None:
+            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
+        return self._status(state, self._clock())
 
-    async def resume(self, replay_id: str) -> ReplayState:
+    async def pause(self, replay_id: str) -> ReplayStatus:
         now = self._clock()
-        return await self._change(replay_id, lambda playback: resumed(playback, now))
+        return await self._change(replay_id, now, lambda playback: paused(playback, now))
 
-    async def set_speed(self, replay_id: str, speed: ReplaySpeed) -> ReplayState:
+    async def resume(self, replay_id: str) -> ReplayStatus:
         now = self._clock()
-        return await self._change(replay_id, lambda playback: with_speed(playback, speed, now))
+        return await self._change(replay_id, now, lambda playback: resumed(playback, now))
 
-    async def _change(self, replay_id: str, change: Callable[[Playback], Playback]) -> ReplayState:
+    async def set_speed(self, replay_id: str, speed: ReplaySpeed) -> ReplayStatus:
+        now = self._clock()
+        return await self._change(replay_id, now, lambda playback: with_speed(playback, speed, now))
+
+    async def _change(
+        self, replay_id: str, now: float, change: Callable[[Playback], Playback]
+    ) -> ReplayStatus:
         state = await self._store.update(
             replay_id, lambda state: replace(state, playback=change(state.playback))
         )
         if state is None:
-            raise ReplayNotFoundError(replay_id)
-        return state
+            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
+        return self._status(state, now)
+
+    @staticmethod
+    def _status(state: ReplayState, now: float) -> ReplayStatus:
+        return ReplayStatus(state, session_s_at(state.playback, now))
 
 
 class ProduceReplay:
@@ -256,3 +302,34 @@ class StartReplay:
             raise TooManyReplaysError("the number of active replays is at its limit")
         self._producers.ensure(replay_id)
         return replay_id
+
+
+class WatchReplay:
+    """A viewer's read of a replay: from where the viewer stopped, until the replay is gone."""
+
+    def __init__(
+        self, store: ReplayStore, producers: ReplayProducers, policy: ReplayPolicy
+    ) -> None:
+        self._store = store
+        self._producers = producers
+        self._block_s = policy.tick_s
+
+    async def __call__(
+        self, replay_id: str, after: str | None
+    ) -> AsyncIterator[StreamEntry | ReplayFailure]:
+        if await self._store.state(replay_id) is None:
+            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
+        # A producer that died with its process resumes as soon as someone watches.
+        self._producers.ensure(replay_id)
+        return self._entries(replay_id, after)
+
+    async def _entries(
+        self, replay_id: str, after: str | None
+    ) -> AsyncIterator[StreamEntry | ReplayFailure]:
+        while (read := await self._store.read(replay_id, after, self._block_s)) is not None:
+            for entry in read.entries:
+                yield entry
+                after = entry.entry_id
+            if read.state.failure is not None:
+                yield ReplayFailure(read.state.failure)
+                return
