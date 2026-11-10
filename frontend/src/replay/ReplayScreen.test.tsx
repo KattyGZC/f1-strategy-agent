@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createApiClient } from '../api/client.ts'
 import {
@@ -31,6 +31,7 @@ const API: Record<string, Route> = {
   'GET /api/sessions/9472': () => json(ENTRY),
   'GET /api/sessions/9468': () => json({ ...ENTRY, ...QUALIFYING }),
   'POST /api/replays': () => json(REPLAY, 201),
+  'DELETE /api/replays/replay-1': () => new Response(null, { status: 204 }),
 }
 
 /** Rejects as fetch does when its request is aborted. */
@@ -104,14 +105,74 @@ describe('ReplayScreen', () => {
     expect(screen.getByRole('button', { name: 'Starting...' })).toBeDisabled()
   })
 
-  it('goes back to the sessions from a replay', async () => {
-    renderScreen()
+  it('stops the replay it leaves and goes back to the sessions', async () => {
+    const { requests } = renderScreen()
     await startReplay()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Choose another session' }))
 
     expect(await screen.findByRole('button', { name: 'Start replay' })).toBeEnabled()
     expect(screen.queryByRole('region', { name: 'Replay' })).not.toBeInTheDocument()
+    await vi.waitFor(() =>
+      expect(
+        requests.map((request) => `${request.method} ${new URL(request.url).pathname}`),
+      ).toContain('DELETE /api/replays/replay-1'),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('says nothing when the replay it leaves was already gone', async () => {
+    renderScreen({
+      ...API,
+      'DELETE /api/replays/replay-1': () =>
+        json({ detail: 'replay replay-1 does not exist or has expired' }, 404),
+    })
+    await startReplay()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose another session' }))
+    await screen.findByRole('button', { name: 'Start replay' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps watching a new replay when the old one fails to stop late', async () => {
+    const answers: ((response: Response) => void)[] = []
+    renderScreen({
+      ...API,
+      'DELETE /api/replays/replay-1': () =>
+        new Promise<Response>((resolve) => answers.push(resolve)),
+    })
+    await startReplay()
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose another session' }))
+    await startReplay()
+    await screen.findByRole('region', { name: 'Replay' })
+
+    await act(async () => answers[0]?.(json({ detail: 'redis down' }, 500)))
+
+    expect(screen.getByRole('region', { name: 'Replay' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [
+      'the API refuses',
+      () => json({ detail: 'redis down' }, 500),
+      'The last replay could not be stopped (redis down); it ends on its own after a few idle minutes.',
+    ],
+    [
+      'the API is unreachable',
+      () => Promise.reject(new TypeError('down')),
+      'The last replay could not be stopped (the API is unreachable); it ends on its own after a few idle minutes.',
+    ],
+  ])('says when %s to stop the replay it leaves', async (_, stop: Route, message) => {
+    renderScreen({ ...API, 'DELETE /api/replays/replay-1': stop })
+    await startReplay()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose another session' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('button', { name: 'Start replay' })).toBeEnabled()
   })
 
   it('says why a replay over the limit did not start', async () => {
