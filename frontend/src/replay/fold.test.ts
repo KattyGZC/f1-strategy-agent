@@ -73,24 +73,13 @@ describe('foldEvent', () => {
     expect(timing).toEqual(NO_TIMING)
   })
 
-  it('keeps the last lap with its tyre, and the position it already had', () => {
-    const timing = timingOf([position(1, 3), lap(1, 4), lap(1, 5, { lap_duration: 91.2 })], 1)
+  it('keeps the whole last lap, and the position it already had', () => {
+    const last = lap(1, 5, { lap_duration: 91.2, compound: null, tyre_age_laps: null })
 
-    expect(timing).toEqual({
+    expect(timingOf([position(1, 3), lap(1, 4), last], 1)).toEqual({
       ...NO_TIMING,
       position: 3,
-      lastLap: { lapNumber: 5, durationS: 91.2 },
-      compound: 'SOFT',
-      tyreAgeLaps: 3,
-    })
-  })
-
-  it('shows no tyre for a lap no stint covers', () => {
-    const timing = timingOf([lap(1, 4), lap(1, 5, { compound: null, tyre_age_laps: null })], 1)
-
-    expect(timing).toEqual({
-      ...NO_TIMING,
-      lastLap: { lapNumber: 5, durationS: 92.608 },
+      lastLap: last,
     })
   })
 
@@ -103,6 +92,23 @@ describe('foldEvent', () => {
     const second = raceControl(2, 'DRS ENABLED')
 
     expect(fold(first, second).raceControl).toEqual([second, first])
+  })
+
+  it('keeps the flag of the latest message about the whole track', () => {
+    const state = fold(
+      raceControl(1, 'GREEN LIGHT - PIT EXIT OPEN'),
+      raceControl(2, 'RED FLAG', { flag: 'RED' }),
+      raceControl(3, 'YELLOW IN TRACK SECTOR 4', { flag: 'YELLOW', scope: 'Sector', sector: 4 }),
+      raceControl(4, 'DRS DISABLED', { category: 'Drs', flag: null, scope: null }),
+    )
+
+    expect(state.trackFlag).toBe('RED')
+  })
+
+  it('has no track flag before a message about the whole track', () => {
+    const state = fold(raceControl(1, 'BLUE FLAG FOR CAR 2', { flag: 'BLUE', scope: 'Driver' }))
+
+    expect(state.trackFlag).toBeNull()
   })
 
   it('keeps the latest weather reading', () => {

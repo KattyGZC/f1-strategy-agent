@@ -4,12 +4,15 @@ import type { ApiClient } from '../api/client.ts'
 import { REPLAY_SPEEDS, type ReplaySpeed } from '../api/closedSets.ts'
 import { failureMessage, UNREACHABLE } from '../api/errors.ts'
 import type { components } from '../api/schema.ts'
+import { formatDate } from './format.ts'
+import { SpeedButtons } from './SpeedButtons.tsx'
 
-type Schemas = components['schemas']
+type Session = components['schemas']['SessionResponse']
+type Sessions = readonly [Session, ...Session[]]
 
 type ListState =
   | { kind: 'loading' }
-  | { kind: 'loaded'; sessions: Schemas['SessionResponse'][] }
+  | { kind: 'loaded'; sessions: Session[] }
   | { kind: 'failed'; message: string }
 
 interface Props {
@@ -42,85 +45,133 @@ export function SessionPicker({ client, starting, onStart }: Readonly<Props>) {
 
   switch (list.kind) {
     case 'loading':
-      return <p>Loading the sessions...</p>
+      return <p className="notice">Loading the sessions...</p>
     case 'failed':
-      return <p role="alert">Could not list the sessions: {list.message}</p>
+      return (
+        <p className="notice" role="alert">
+          Could not list the sessions: {list.message}
+        </p>
+      )
     case 'loaded': {
       const [latest, ...older] = list.sessions
       return latest === undefined ? (
-        <p>No session is loaded yet. Run make ingest and make transform first.</p>
+        <p className="notice">
+          No session is loaded yet. Run make ingest and make transform first.
+        </p>
       ) : (
-        <StartForm sessions={[latest, ...older]} starting={starting} onStart={onStart} />
+        <Picker sessions={[latest, ...older]} starting={starting} onStart={onStart} />
       )
     }
   }
 }
 
-interface FormProps {
-  sessions: readonly [Schemas['SessionResponse'], ...Schemas['SessionResponse'][]]
+interface PickerProps {
+  sessions: Sessions
   starting: boolean
   onStart(sessionKey: number, speed: ReplaySpeed): void
 }
 
-function StartForm({ sessions, starting, onStart }: Readonly<FormProps>) {
-  const [sessionKey, setSessionKey] = useState(sessions[0].session_key)
-  const [speed, setSpeed] = useState<ReplaySpeed>(REPLAY_SPEEDS[0])
+function Picker({ sessions, starting, onStart }: Readonly<PickerProps>) {
+  const [chosen, setChosen] = useState<Session>(sessions[0])
 
   return (
-    <form
-      className="start-form"
-      onSubmit={(submitted) => {
-        submitted.preventDefault()
-        onStart(sessionKey, speed)
-      }}
-    >
-      <label>
-        Session
-        <select
-          value={sessionKey}
-          onChange={(changed) => setSessionKey(Number(changed.target.value))}
-        >
-          {sessions.map((session) => (
-            <option key={session.session_key} value={session.session_key}>
-              {session.year} {session.meeting_name}, {session.session_name}
-            </option>
+    <div className="picker">
+      <section className="picker-meetings">
+        <h2 className="hero">Relive a race as it happened</h2>
+        <p className="muted">
+          Pick a Grand Prix and a session. The timing, the weather and race control play back in the
+          order they happened.
+        </p>
+        <div className="meetings">
+          {byMeeting(sessions).map((meeting) => (
+            <MeetingCard
+              key={meeting[0].meeting_key}
+              sessions={meeting}
+              chosen={chosen}
+              onChoose={setChosen}
+            />
           ))}
-        </select>
-      </label>
-      <SpeedSelect speed={speed} disabled={starting} onSpeed={setSpeed} />
-      <button type="submit" disabled={starting}>
+        </div>
+      </section>
+      <ReadyPanel session={chosen} starting={starting} onStart={onStart} />
+    </div>
+  )
+}
+
+interface ReadyProps {
+  session: Session
+  starting: boolean
+  onStart(sessionKey: number, speed: ReplaySpeed): void
+}
+
+function ReadyPanel({ session, starting, onStart }: Readonly<ReadyProps>) {
+  const [speed, setSpeed] = useState<ReplaySpeed>(REPLAY_SPEEDS[0])
+  return (
+    <aside className="panel ready" aria-label="Ready to start">
+      <span className="label">Ready to start</span>
+      <h3>{session.meeting_name}</h3>
+      <p className="muted">
+        {session.session_name}, {session.circuit_short_name}, {formatDate(session.date_start)}
+      </p>
+      <span className="label">Playback speed</span>
+      <SpeedButtons speed={speed} disabled={starting} onSpeed={setSpeed} />
+      <p className="muted small">
+        At 60x a two-hour race plays in about two minutes; 1x is real time.
+      </p>
+      <button
+        type="button"
+        className="primary"
+        disabled={starting}
+        onClick={() => onStart(session.session_key, speed)}
+      >
         {starting ? 'Starting...' : 'Start replay'}
       </button>
-    </form>
+      <p className="muted small">
+        A session opens about an hour before the start: the grid, the weather and race control come
+        first, and the laps begin at the green light.
+      </p>
+    </aside>
   )
 }
 
-interface SpeedProps {
-  speed: ReplaySpeed
-  disabled: boolean
-  onSpeed(speed: ReplaySpeed): void
+interface CardProps {
+  sessions: Sessions
+  chosen: Session
+  onChoose(session: Session): void
 }
 
-export function SpeedSelect({ speed, disabled, onSpeed }: Readonly<SpeedProps>) {
+function MeetingCard({ sessions, chosen, onChoose }: Readonly<CardProps>) {
+  const [meeting] = sessions
   return (
-    <label>
-      Speed
-      <select
-        value={speed}
-        disabled={disabled}
-        onChange={(changed) => {
-          const chosen = REPLAY_SPEEDS.find((value) => String(value) === changed.target.value)
-          if (chosen !== undefined) {
-            onSpeed(chosen)
-          }
-        }}
-      >
-        {REPLAY_SPEEDS.map((value) => (
-          <option key={value} value={value}>
-            {value}x
-          </option>
+    <article className="panel meeting" aria-current={meeting.meeting_key === chosen.meeting_key}>
+      <span className="label">
+        {meeting.country_name}, {formatDate(meeting.date_start)}
+      </span>
+      <h3>{meeting.meeting_name}</h3>
+      <p className="muted">{meeting.circuit_short_name}</p>
+      <div className="chips">
+        {sessions.map((session) => (
+          <button
+            key={session.session_key}
+            type="button"
+            className="chip"
+            aria-pressed={session.session_key === chosen.session_key}
+            onClick={() => onChoose(session)}
+          >
+            {session.session_name}
+          </button>
         ))}
-      </select>
-    </label>
+      </div>
+    </article>
   )
+}
+
+/** The sessions of each meeting, in the order the API listed them. */
+function byMeeting(sessions: Sessions): Sessions[] {
+  const meetings = new Map<number, Sessions>()
+  for (const session of sessions) {
+    const meeting = meetings.get(session.meeting_key)
+    meetings.set(session.meeting_key, meeting === undefined ? [session] : [...meeting, session])
+  }
+  return [...meetings.values()]
 }

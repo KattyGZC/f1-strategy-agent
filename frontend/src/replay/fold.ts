@@ -4,6 +4,8 @@ type Schemas = components['schemas']
 export type ReplayEvent = Schemas['ReplayEvent']
 export type RaceControlEvent = Schemas['RaceControlEvent']
 export type WeatherEvent = Schemas['WeatherEvent']
+export type LapEvent = Schemas['LapEvent']
+export type Flag = Schemas['Flag']
 export type SessionDriver = Schemas['DriverResponse']
 
 export type Gap = { unit: 'seconds'; value: number } | { unit: 'laps'; value: number }
@@ -12,9 +14,8 @@ export interface DriverTiming {
   readonly position: number | null
   readonly gapToLeader: Gap | null
   readonly interval: Gap | null
-  readonly lastLap: { readonly lapNumber: number; readonly durationS: number | null } | null
-  readonly compound: Schemas['Compound'] | null
-  readonly tyreAgeLaps: number | null
+  /** Its compound and tyre age are those of the stint the lap belongs to. */
+  readonly lastLap: LapEvent | null
   readonly lastPitLap: number | null
 }
 
@@ -23,6 +24,8 @@ export interface ReplayState {
   /** The latest first. */
   readonly raceControl: readonly RaceControlEvent[]
   readonly weather: WeatherEvent | null
+  /** The flag of the latest race control message about the whole track. */
+  readonly trackFlag: Flag | null
   /** The instant of the latest event, as the API sent it. */
   readonly sessionTime: string | null
 }
@@ -37,8 +40,6 @@ export const NO_TIMING: DriverTiming = {
   gapToLeader: null,
   interval: null,
   lastLap: null,
-  compound: null,
-  tyreAgeLaps: null,
   lastPitLap: null,
 }
 
@@ -46,6 +47,7 @@ export const EMPTY_REPLAY: ReplayState = {
   timings: new Map(),
   raceControl: [],
   weather: null,
+  trackFlag: null,
   sessionTime: null,
 }
 
@@ -61,15 +63,15 @@ export function foldEvent(state: ReplayState, event: ReplayEvent): ReplayState {
         interval: gap(event.interval_s, event.interval_laps),
       })
     case 'lap':
-      return withTiming(next, event.driver_number, {
-        lastLap: { lapNumber: event.lap_number, durationS: event.lap_duration },
-        compound: event.compound,
-        tyreAgeLaps: event.tyre_age_laps,
-      })
+      return withTiming(next, event.driver_number, { lastLap: event })
     case 'pit':
       return withTiming(next, event.driver_number, { lastPitLap: event.lap_number })
     case 'race_control':
-      return { ...next, raceControl: [event, ...state.raceControl] }
+      return {
+        ...next,
+        raceControl: [event, ...state.raceControl],
+        trackFlag: event.scope === 'Track' && event.flag !== null ? event.flag : state.trackFlag,
+      }
     case 'weather':
       return { ...next, weather: event }
     case 'overtake':

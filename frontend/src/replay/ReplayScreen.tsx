@@ -36,25 +36,23 @@ export function ReplayScreen({ client, openStream }: Readonly<Props>) {
 
   if (screen.kind === 'watching') {
     return (
-      <>
-        <button type="button" onClick={() => setScreen({ kind: 'choosing', error: null })}>
-          Choose another session
-        </button>
-        <ReplayView
-          key={screen.replay.replay_id}
-          client={client}
-          openStream={openStream}
-          replay={screen.replay}
-          entry={screen.entry}
-        />
-      </>
+      <ReplayView
+        key={screen.replay.replay_id}
+        client={client}
+        openStream={openStream}
+        replay={screen.replay}
+        entry={screen.entry}
+        onLeave={() => setScreen({ kind: 'choosing', error: null })}
+      />
     )
   }
   return (
     <>
       <SessionPicker client={client} starting={screen.kind === 'starting'} onStart={start} />
       {screen.kind === 'choosing' && screen.error !== null ? (
-        <p role="alert">The replay did not start: {screen.error}</p>
+        <p className="notice" role="alert">
+          The replay did not start: {screen.error}
+        </p>
       ) : null}
     </>
   )

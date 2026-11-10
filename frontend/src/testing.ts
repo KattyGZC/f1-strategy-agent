@@ -80,6 +80,7 @@ export const EVENT_AT = '2024-03-02T15:03:27.000Z'
 
 export const SESSION: Schemas['SessionResponse'] = {
   session_key: 9472,
+  meeting_key: 1229,
   session_type: 'Race',
   session_name: 'Race',
   date_start: '2024-03-02T15:00:00Z',
@@ -174,7 +175,11 @@ export function pit(driverNumber: number, lapNumber: number): Schemas['PitEvent'
   }
 }
 
-export function raceControl(seq: number, message: string): Schemas['RaceControlEvent'] {
+export function raceControl(
+  seq: number,
+  message: string,
+  fields: Partial<Schemas['RaceControlEvent']> = {},
+): Schemas['RaceControlEvent'] {
   return {
     kind: 'race_control',
     at: EVENT_AT,
@@ -187,6 +192,7 @@ export function raceControl(seq: number, message: string): Schemas['RaceControlE
     lap_number: null,
     qualifying_phase: null,
     message,
+    ...fields,
   }
 }
 

@@ -26,6 +26,11 @@ export function formatLapTime(durationS: number | null): string {
   return `${minutes}:${seconds}`
 }
 
+/** A duration under a minute, such as a sector time: 29.123. */
+export function formatSeconds(durationS: number | null): string {
+  return durationS === null ? NOTHING : durationS.toFixed(3)
+}
+
 /** The UTC time of day of an instant the API sent, such as 15:03:27. */
 export function formatClock(at: string | null): string {
   return at === null ? NOTHING : new Date(at).toISOString().slice(11, 19)
@@ -33,6 +38,18 @@ export function formatClock(at: string | null): string {
 
 export function formatPitLap(lapNumber: number | null): string {
   return lapNumber === null ? NOTHING : `L${lapNumber}`
+}
+
+const DAY_MONTH_YEAR = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+})
+
+/** The UTC date of an instant the API sent, such as 2 Mar 2024. */
+export function formatDate(at: string): string {
+  return DAY_MONTH_YEAR.format(new Date(at))
 }
 
 export function formatOptional(value: number | string | null): string {

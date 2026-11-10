@@ -30,12 +30,12 @@ export function HealthStatus({ client }: Readonly<{ client: ApiClient }>) {
 
   switch (state.kind) {
     case 'loading':
-      return <p>Checking the API...</p>
+      return <p className="api-status">Checking the API...</p>
     case 'loaded':
-      return <p>API status: {state.health.status}</p>
+      return <p className="api-status api-status--ok">API status: {state.health.status}</p>
     case 'failed':
       return (
-        <p role="alert">
+        <p className="api-status api-status--down" role="alert">
           API unreachable{state.httpStatus === null ? '' : ` (HTTP ${state.httpStatus})`}
         </p>
       )

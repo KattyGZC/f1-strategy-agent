@@ -15,9 +15,19 @@ import {
 import { ReplayScreen } from './ReplayScreen.tsx'
 
 const QUALIFYING = { ...SESSION, session_key: 9468, session_name: 'Qualifying' } as const
+const ABU_DHABI = {
+  ...SESSION,
+  session_key: 9662,
+  meeting_key: 1252,
+  date_start: '2024-12-08T13:00:00Z',
+  meeting_name: 'Abu Dhabi Grand Prix',
+  circuit_short_name: 'Yas Marina Circuit',
+  country_name: 'United Arab Emirates',
+} as const
 
 const API: Record<string, Route> = {
-  'GET /api/sessions': () => json([SESSION, QUALIFYING]),
+  'GET /api/sessions': () => json([ABU_DHABI, SESSION, QUALIFYING]),
+  'GET /api/sessions/9662': () => json({ ...ENTRY, ...ABU_DHABI }),
   'GET /api/sessions/9472': () => json(ENTRY),
   'GET /api/sessions/9468': () => json({ ...ENTRY, ...QUALIFYING }),
   'POST /api/replays': () => json(REPLAY, 201),
@@ -43,43 +53,51 @@ async function startReplay() {
 }
 
 describe('ReplayScreen', () => {
-  it('lists the loaded sessions, the latest first', async () => {
+  it('groups the loaded sessions by Grand Prix, the latest first', async () => {
     renderScreen()
 
-    const options = within(await screen.findByLabelText('Session')).getAllByRole('option')
+    const cards = await screen.findAllByRole('article')
 
-    expect(options.map((option) => option.textContent)).toEqual([
-      '2024 Bahrain Grand Prix, Race',
-      '2024 Bahrain Grand Prix, Qualifying',
+    expect(cards.map((card) => within(card).getByRole('heading').textContent)).toEqual([
+      'Abu Dhabi Grand Prix',
+      'Bahrain Grand Prix',
     ])
+    expect(
+      within(cards[1] as HTMLElement)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Race', 'Qualifying'])
+  })
+
+  it('is ready to start the latest session at real time', async () => {
+    renderScreen()
+
+    const ready = within(await screen.findByRole('complementary', { name: 'Ready to start' }))
+
+    expect(ready.getByRole('heading')).toHaveTextContent('Abu Dhabi Grand Prix')
+    expect(ready.getByText('Race, Yas Marina Circuit, 8 Dec 2024')).toBeInTheDocument()
+    expect(ready.getByRole('button', { name: '1x' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByRole('article')[0]).toHaveAttribute('aria-current', 'true')
   })
 
   it('starts the chosen session at the chosen speed and watches it', async () => {
     const { requests, streams } = renderScreen()
+    const bahrain = within((await screen.findAllByRole('article'))[1] as HTMLElement)
 
-    fireEvent.change(await screen.findByLabelText('Session'), { target: { value: '9468' } })
-    fireEvent.change(screen.getByLabelText('Speed'), { target: { value: '60' } })
+    fireEvent.click(bahrain.getByRole('button', { name: 'Qualifying' }))
+    fireEvent.click(screen.getByRole('button', { name: '60x' }))
+    const ready = within(screen.getByRole('complementary', { name: 'Ready to start' }))
+    expect(ready.getByText('Qualifying, Sakhir, 2 Mar 2024')).toBeInTheDocument()
     await startReplay()
 
-    expect(await screen.findByRole('heading', { name: /Qualifying/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Bahrain Grand Prix' })).toBeInTheDocument()
     const started = requests.find((request) => request.method === 'POST')
     expect(await started?.json()).toEqual({ session_key: 9468, speed: 60 })
     expect(streams.map((stream) => stream.path)).toEqual(['/api/replays/replay-1/events'])
   })
 
-  it('ignores a speed that is not one of the replay speeds', async () => {
-    const { requests } = renderScreen()
-
-    fireEvent.change(await screen.findByLabelText('Speed'), { target: { value: '3' } })
-    await startReplay()
-
-    await screen.findByRole('region', { name: 'Replay' })
-    const started = requests.find((request) => request.method === 'POST')
-    expect(await started?.json()).toEqual({ session_key: 9472, speed: 1 })
-  })
-
   it('shows the start as pending until the API answers', async () => {
-    renderScreen({ ...API, 'GET /api/sessions/9472': () => new Promise(() => {}) })
+    renderScreen({ ...API, 'GET /api/sessions/9662': () => new Promise(() => {}) })
 
     await startReplay()
 
@@ -113,14 +131,14 @@ describe('ReplayScreen', () => {
   it('does not start a replay of a session it cannot read', async () => {
     const { requests } = renderScreen({
       ...API,
-      'GET /api/sessions/9472': () =>
-        json({ detail: 'session 9472 is not in the clean model' }, 404),
+      'GET /api/sessions/9662': () =>
+        json({ detail: 'session 9662 is not in the clean model' }, 404),
     })
 
     await startReplay()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'The replay did not start: session 9472 is not in the clean model',
+      'The replay did not start: session 9662 is not in the clean model',
     )
     expect(requests.filter((request) => request.method === 'POST')).toEqual([])
   })

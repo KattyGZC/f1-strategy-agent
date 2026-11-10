@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createApiClient } from '../api/client.ts'
 import {
@@ -29,7 +29,7 @@ const CONTROLS: Record<string, Route> = {
     json({ ...REPLAY, speed: ((await request.json()) as { speed: number }).speed }),
 }
 
-function renderView(routes: Record<string, Route> = CONTROLS) {
+function renderView(routes: Record<string, Route> = CONTROLS, onLeave = () => {}) {
   const api = fakeApi(routes)
   const streams = fakeStreams()
   const view = render(
@@ -38,6 +38,7 @@ function renderView(routes: Record<string, Route> = CONTROLS) {
       openStream={streams.open}
       replay={REPLAY}
       entry={ENTRY}
+      onLeave={onLeave}
     />,
   )
   const [stream] = streams.streams
@@ -60,62 +61,159 @@ async function emit(
   })
 }
 
+function region(name: string) {
+  return within(screen.getByRole('region', { name }))
+}
+
+function towerRowsShown() {
+  return within(screen.getByRole('table')).getAllByRole('row').slice(1)
+}
+
 function towerCells() {
-  const rows = within(screen.getByRole('table', { name: 'Timing' }))
-    .getAllByRole('row')
-    .slice(1)
-  return rows.map((row) => Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent))
+  return towerRowsShown().map((row) =>
+    Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent),
+  )
+}
+
+/** The value printed right after a label. */
+function valueOf(scope: ReturnType<typeof within>, label: string) {
+  return scope.getByText(label).nextElementSibling?.textContent
 }
 
 describe('ReplayView', () => {
-  it('shows every driver before any event arrives', () => {
+  it('shows every driver, and says what has not arrived yet', () => {
     renderView()
 
     expect(towerCells()).toEqual([
-      ['-', 'VER', '-', '-', '-', '-', '-', '-'],
-      ['-', 'LEC', '-', '-', '-', '-', '-', '-'],
+      ['-', 'VER', '-', '-', '-', '-'],
+      ['-', 'LEC', '-', '-', '-', '-'],
     ])
     expect(screen.getByText('Connecting...')).toBeInTheDocument()
-    expect(screen.getByText('No reading yet.')).toBeInTheDocument()
-    expect(screen.getByText('No messages yet.')).toBeInTheDocument()
+    expect(screen.getByText('None yet')).toBeInTheDocument()
+    expect(region('Weather').getByText('No reading yet.')).toBeInTheDocument()
+    expect(region('Race control').getByText('No messages yet.')).toBeInTheDocument()
+    expect(
+      region('Circuit').getByText('The circuit map comes in a later version.'),
+    ).toBeInTheDocument()
   })
 
-  it('folds the events into the tower, the weather and race control', async () => {
+  it('folds the events into the header, the tower, the weather and race control', async () => {
     const { stream } = renderView()
 
     await emit(
       stream,
       position(1, 2),
       position(16, 1),
-      interval(1, { gap_to_leader_s: 1.234, interval_s: 1.234 }),
+      interval(1, { gap_to_leader_s: 1.5, interval_s: 1.234 }),
       lap(1, 12, { compound: 'HARD', tyre_age_laps: 0 }),
+      lap(16, 12),
       pit(1, 11),
       WEATHER,
-      raceControl(7, 'DRS ENABLED'),
+      raceControl(7, 'GREEN LIGHT - PIT EXIT OPEN'),
     )
 
     expect(towerCells()).toEqual([
-      ['1', 'LEC', '-', '-', '-', '-', '-', '-'],
-      ['2', 'VER', '+1.234', '+1.234', '1:32.608', '12', 'HARD (0)', 'L11'],
+      ['1', 'LEC', '-', '1:32.608', '3', '-'],
+      ['2', 'VER', '+1.234', '1:32.608', '0', 'L11'],
     ])
-    expect(screen.getByRole('rowheader', { name: /VER/ })).toHaveAttribute(
-      'title',
-      'Max VERSTAPPEN, Red Bull Racing',
+    expect(within(towerRowsShown()[1] as HTMLElement).getByRole('img')).toHaveAccessibleName('Hard')
+    const header = within(document.body)
+    expect(valueOf(header, 'Leader lap')).toBe('12')
+    expect(valueOf(header, 'Track flag')).toBe('Green')
+    expect(screen.getByText('Session time, UTC').previousElementSibling).toHaveTextContent(
+      '15:03:27',
     )
-    expect(screen.getByText('26.1 °C')).toBeInTheDocument()
-    expect(screen.getByText('1.2 m/s from 135°')).toBeInTheDocument()
-    expect(screen.getByText('No')).toBeInTheDocument()
-    expect(screen.getByRole('listitem')).toHaveTextContent('15:03:27 DRS ENABLED')
-    expect(screen.getByText(/UTC/)).toHaveTextContent('15:03:27 UTC. Live')
+    expect(screen.getByText('Live replay')).toBeInTheDocument()
+    const weather = region('Weather')
+    expect(valueOf(weather, 'Track')).toBe('26.1 °C')
+    expect(valueOf(weather, 'Wind')).toBe('1.2 m/s from 135°')
+    expect(valueOf(weather, 'Rain')).toBe('Dry')
+    expect(region('Race control').getByRole('listitem')).toHaveTextContent(
+      '15:03:27 FlagGREEN LIGHT - PIT EXIT OPEN',
+    )
   })
 
-  it('shows a compound without an age, and rain', async () => {
+  it('shows the gap to the leader on demand', async () => {
+    const { stream } = renderView()
+    await emit(stream, interval(1, { gap_to_leader_laps: 1, interval_s: 0.4 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gap to leader' }))
+
+    expect(screen.getByRole('columnheader', { name: 'Gap' })).toBeInTheDocument()
+    expect(towerCells()[0]?.[2]).toBe('+1 LAP')
+    expect(screen.getByRole('button', { name: 'Gap to leader' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Interval' }))
+    expect(towerCells()[0]?.[2]).toBe('+0.400')
+  })
+
+  it('shows a tyre without its age, and a message without a flag', async () => {
     const { stream } = renderView()
 
-    await emit(stream, lap(16, 3, { tyre_age_laps: null }), { ...WEATHER, rainfall: true })
+    await emit(
+      stream,
+      lap(1, 3, { tyre_age_laps: null }),
+      raceControl(8, 'DRS DISABLED', { category: 'Drs', flag: null, scope: null }),
+    )
 
-    expect(towerCells()[1]).toEqual(['-', 'LEC', '-', '-', '1:32.608', '3', 'SOFT', '-'])
-    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(towerCells()[0]?.[4]).toBe('')
+    expect(within(towerRowsShown()[0] as HTMLElement).getByRole('img')).toHaveAccessibleName('Soft')
+    expect(region('Race control').getByRole('listitem')).toHaveTextContent('DRSDRS DISABLED')
+  })
+
+  it('shows no driver card for a session without drivers', () => {
+    const api = fakeApi(CONTROLS)
+    render(
+      <ReplayView
+        client={createApiClient(API_ORIGIN, api.fetchImpl)}
+        openStream={fakeStreams().open}
+        replay={REPLAY}
+        entry={{ ...ENTRY, drivers: [] }}
+        onLeave={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('article', { name: 'Selected driver' })).not.toBeInTheDocument()
+    expect(towerRowsShown()).toEqual([])
+  })
+
+  it('follows the first driver until another one is picked', async () => {
+    const { stream } = renderView()
+    await emit(stream, position(16, 1), position(1, 2), lap(1, 12))
+
+    expect(
+      within(screen.getByRole('article', { name: 'Selected driver' })).getByRole('heading'),
+    ).toHaveTextContent('Charles LECLERC')
+    fireEvent.click(screen.getByRole('button', { name: /VER/ }))
+
+    const card = within(screen.getByRole('article', { name: 'Selected driver' }))
+    expect(card.getByRole('heading')).toHaveTextContent('Max VERSTAPPEN')
+    expect(card.getByText('P2, Red Bull Racing, #1')).toBeInTheDocument()
+    expect(valueOf(card, 'Last lap, lap 12')).toBe('1:32.608')
+    expect(valueOf(card, 'Sector 1')).toBe('29.100')
+    expect(valueOf(card, 'Sector 3')).toBe('24.008')
+    expect(valueOf(card, 'Speed trap, km/h')).toBe('310')
+    expect(card.getByRole('img', { name: 'Soft' })).toBeInTheDocument()
+    expect(screen.getByRole('row', { selected: true })).toHaveTextContent('VER')
+  })
+
+  it('shows rain', async () => {
+    const { stream } = renderView()
+
+    await emit(stream, { ...WEATHER, rainfall: true })
+
+    expect(valueOf(region('Weather'), 'Rain')).toBe('Raining')
+  })
+
+  it('keeps the strategy tools visible but off until they exist', () => {
+    renderView()
+
+    const strategy = region('Strategy, coming soon')
+    expect(strategy.getByRole('button', { name: 'What if...' })).toBeDisabled()
+    expect(strategy.getByRole('button', { name: 'Ask the strategist' })).toBeDisabled()
+    expect(strategy.getByRole('textbox')).toBeDisabled()
   })
 
   it('pauses, resumes and changes the speed through the API', async () => {
@@ -124,9 +222,12 @@ describe('ReplayView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
     await screen.findByRole('button', { name: 'Pause' })
-    fireEvent.change(screen.getByLabelText('Speed'), { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: '20x' }))
 
-    expect(await screen.findByDisplayValue('20x')).toBeInTheDocument()
+    await vi.waitFor(() =>
+      expect(screen.getByRole('button', { name: '20x' })).toHaveAttribute('aria-pressed', 'true'),
+    )
+    expect(screen.getByText('1 second here is 20 seconds of session')).toBeInTheDocument()
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
       [
         'POST /api/replays/replay-1/pause',
@@ -136,13 +237,19 @@ describe('ReplayView', () => {
     )
   })
 
+  it('says real time at 1x', () => {
+    renderView()
+
+    expect(screen.getByText('Real time')).toBeInTheDocument()
+  })
+
   it('disables the controls while a change is on its way', () => {
     renderView({ ...CONTROLS, 'POST /api/replays/replay-1/pause': () => new Promise(() => {}) })
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
 
     expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
-    expect(screen.getByLabelText('Speed')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '60x' })).toBeDisabled()
   })
 
   it('says why a control failed and keeps the playback it had', async () => {
@@ -186,6 +293,15 @@ describe('ReplayView', () => {
     expect(screen.getByRole('status')).toHaveTextContent('The replay has ended')
     await emit(stream, { kind: 'replay_failed', message: 'boom' })
     expect(screen.getByRole('alert')).toHaveTextContent('The replay failed: boom')
+  })
+
+  it('goes back to the sessions on request', () => {
+    const onLeave = vi.fn()
+    renderView(CONTROLS, onLeave)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose another session' }))
+
+    expect(onLeave).toHaveBeenCalledOnce()
   })
 
   it('closes the stream when it unmounts', () => {
