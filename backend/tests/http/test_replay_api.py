@@ -116,12 +116,26 @@ def test_a_replay_past_the_limit_is_refused(client: TestClient) -> None:
     assert response.json() == {"detail": "the number of active replays is at its limit"}
 
 
+def test_a_stopped_replay_is_gone_and_frees_its_place(client: TestClient) -> None:
+    stopped = start(client, speed=1)
+    start(client)
+
+    response = client.delete(f"/api/replays/{stopped}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/api/replays/{stopped}").status_code == 404
+    assert client.get(f"/api/replays/{stopped}/events").status_code == 404
+    assert client.post("/api/replays", json={"session_key": SESSION, "speed": 1}).status_code == 201
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
         ("GET", "/api/replays/missing"),
         ("POST", "/api/replays/missing/pause"),
         ("POST", "/api/replays/missing/resume"),
+        ("DELETE", "/api/replays/missing"),
         ("GET", "/api/replays/missing/events"),
     ],
 )

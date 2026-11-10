@@ -1136,6 +1136,51 @@
       }
     },
     "/api/replays/{replay_id}": {
+      "delete": {
+        "description": "Removes the replay and frees its place; its event stream ends.",
+        "operationId": "stop_replay_api_replays__replay_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Replay",
+        "tags": [
+          "replays"
+        ]
+      },
       "get": {
         "operationId": "read_replay_api_replays__replay_id__get",
         "parameters": [
