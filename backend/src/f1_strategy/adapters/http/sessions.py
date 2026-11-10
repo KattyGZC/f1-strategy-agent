@@ -20,6 +20,7 @@ class SessionResponse(BaseModel):
     session_type: SessionType
     session_name: SessionName
     date_start: AwareDatetime
+    meeting_key: int
     year: int
     meeting_name: str
     circuit_short_name: str

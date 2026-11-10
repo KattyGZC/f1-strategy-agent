@@ -779,6 +779,10 @@
             "title": "Drivers",
             "type": "array"
           },
+          "meeting_key": {
+            "title": "Meeting Key",
+            "type": "integer"
+          },
           "meeting_name": {
             "title": "Meeting Name",
             "type": "string"
@@ -803,6 +807,7 @@
           "session_type",
           "session_name",
           "date_start",
+          "meeting_key",
           "year",
           "meeting_name",
           "circuit_short_name",
@@ -837,6 +842,10 @@
             "title": "Date Start",
             "type": "string"
           },
+          "meeting_key": {
+            "title": "Meeting Key",
+            "type": "integer"
+          },
           "meeting_name": {
             "title": "Meeting Name",
             "type": "string"
@@ -861,6 +870,7 @@
           "session_type",
           "session_name",
           "date_start",
+          "meeting_key",
           "year",
           "meeting_name",
           "circuit_short_name",

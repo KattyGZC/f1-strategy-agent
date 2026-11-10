@@ -380,6 +380,7 @@ def loaded(session: CleanSession) -> LoadedSession:
         session_type=session.session.session_type,
         session_name=session.session.session_name,
         date_start=session.session.date_start,
+        meeting_key=session.meeting.meeting_key,
         year=session.meeting.year,
         meeting_name=session.meeting.meeting_name,
         circuit_short_name=session.meeting.circuit_short_name,

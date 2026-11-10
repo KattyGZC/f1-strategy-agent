@@ -54,8 +54,8 @@ REPLAYED_ENUM_TYPES: EnumTypes = (
 CATALOG_ENUM_TYPES: EnumTypes = (("session_type", SessionType), ("session_name", SessionName))
 
 SESSION_SELECT = """
-    SELECT s.session_key, s.session_type, s.session_name, s.date_start, m.year, m.meeting_name,
-        m.circuit_short_name, m.country_name
+    SELECT s.session_key, s.session_type, s.session_name, s.date_start, m.meeting_key, m.year,
+        m.meeting_name, m.circuit_short_name, m.country_name
     FROM session s JOIN meeting m USING (meeting_key)
 """
 SESSIONS_QUERY = SESSION_SELECT + "ORDER BY s.date_start DESC, s.session_key DESC"

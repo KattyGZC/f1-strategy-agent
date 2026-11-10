@@ -452,6 +452,8 @@ export interface components {
              * @description By driver number
              */
             drivers: components["schemas"]["DriverResponse"][];
+            /** Meeting Key */
+            meeting_key: number;
             /** Meeting Name */
             meeting_name: string;
             /** Session Key */
@@ -477,6 +479,8 @@ export interface components {
              * Format: date-time
              */
             date_start: string;
+            /** Meeting Key */
+            meeting_key: number;
             /** Meeting Name */
             meeting_name: string;
             /** Session Key */

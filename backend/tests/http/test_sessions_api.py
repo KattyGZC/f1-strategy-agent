@@ -10,6 +10,7 @@ SESSION_FIELDS = {
     "session_type": "Race",
     "session_name": "Race",
     "date_start": "2024-03-02T15:00:00Z",
+    "meeting_key": 1229,
     "year": 2024,
     "meeting_name": "Bahrain Grand Prix",
     "circuit_short_name": "Sakhir",
