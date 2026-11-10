@@ -34,6 +34,8 @@ def sse_events(
     with client.stream("GET", f"/api/replays/{replay_id}/events", headers=headers) as response:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
+        # nginx in front of the API would hold the events back without it.
+        assert response.headers["x-accel-buffering"] == "no"
         for line in response.iter_lines():
             if line.startswith(":"):
                 continue
