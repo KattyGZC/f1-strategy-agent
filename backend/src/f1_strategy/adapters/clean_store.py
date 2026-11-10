@@ -1,5 +1,5 @@
 """The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), and
-the read of a session's rows for its replay (ADR 0009)."""
+the read of a session's rows for its replay (ADR 0009), and the catalog of loaded sessions."""
 
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
@@ -12,6 +12,7 @@ from psycopg.rows import TupleRow, class_row
 from psycopg.types.enum import EnumInfo, register_enum
 from psycopg_pool import AsyncConnectionPool
 
+from f1_strategy.application.sessions import LoadedSession, SessionDriver, SessionEntry
 from f1_strategy.application.transform import (
     ErrorKind,
     Load,
@@ -37,16 +38,32 @@ from f1_strategy.domain.clean import (
     Weather,
     column_names,
 )
+from f1_strategy.domain.openf1 import SessionName, SessionType
 
 type Pool = AsyncConnectionPool[AsyncConnection[TupleRow]]
 
+type EnumTypes = tuple[tuple[str, type[StrEnum]], ...]
+
 # The database enum type of each closed set the replayed tables hold (migration 0002).
-ENUM_TYPES: tuple[tuple[str, type[StrEnum]], ...] = (
+REPLAYED_ENUM_TYPES: EnumTypes = (
     ("compound", Compound),
     ("race_control_category", RaceControlCategory),
     ("flag", Flag),
     ("flag_scope", FlagScope),
 )
+CATALOG_ENUM_TYPES: EnumTypes = (("session_type", SessionType), ("session_name", SessionName))
+
+SESSION_SELECT = """
+    SELECT s.session_key, s.session_type, s.session_name, s.date_start, m.year, m.meeting_name,
+        m.circuit_short_name, m.country_name
+    FROM session s JOIN meeting m USING (meeting_key)
+"""
+SESSIONS_QUERY = SESSION_SELECT + "ORDER BY s.date_start DESC, s.session_key DESC"
+SESSION_QUERY = SESSION_SELECT + "WHERE s.session_key = %s"
+DRIVERS_QUERY = """
+    SELECT driver_number, name_acronym, full_name, team_name, team_colour
+    FROM driver_session WHERE session_key = %s ORDER BY driver_number
+"""
 
 RUN_COLUMNS = (
     "status, input_fingerprint, transform_version, error_kind, loaded_fingerprint, loaded_version"
@@ -266,7 +283,7 @@ class PostgresReplayRows:
             await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             if not await _is_loaded(connection, session_key):
                 return None
-            await _register_enums(connection)
+            await _register_enums(connection, REPLAYED_ENUM_TYPES)
             read = _SessionReader(connection, session_key)
             return SessionRows(
                 laps=await read(Lap, "lap", ("driver_number", "lap_number")),
@@ -283,6 +300,32 @@ class PostgresReplayRows:
                 ),
                 team_radio=await read(TeamRadio, "team_radio", ("driver_number", "date")),
             )
+
+
+class PostgresSessionCatalog:
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def sessions(self) -> tuple[LoadedSession, ...]:
+        async with self._pool.connection() as connection:
+            await _register_enums(connection, CATALOG_ENUM_TYPES)
+            async with connection.cursor(row_factory=class_row(LoadedSession)) as cursor:
+                await cursor.execute(SESSIONS_QUERY)
+                return tuple(await cursor.fetchall())
+
+    async def entry(self, session_key: int) -> SessionEntry | None:
+        """The session and its drivers from one snapshot, as `timeline_rows` reads them."""
+        async with self._pool.connection() as connection, connection.transaction():
+            await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            await _register_enums(connection, CATALOG_ENUM_TYPES)
+            async with connection.cursor(row_factory=class_row(LoadedSession)) as cursor:
+                await cursor.execute(SESSION_QUERY, [session_key])
+                session = await cursor.fetchone()
+            if session is None:
+                return None
+            async with connection.cursor(row_factory=class_row(SessionDriver)) as cursor:
+                await cursor.execute(DRIVERS_QUERY, [session_key])
+                return SessionEntry(session, tuple(await cursor.fetchall()))
 
 
 async def _is_loaded(connection: AsyncConnection[TupleRow], session_key: int) -> bool:
@@ -312,8 +355,8 @@ class _SessionReader:
             return tuple(await cursor.fetchall())
 
 
-async def _register_enums(connection: AsyncConnection[TupleRow]) -> None:
-    for type_name, enum in ENUM_TYPES:
+async def _register_enums(connection: AsyncConnection[TupleRow], enum_types: EnumTypes) -> None:
+    for type_name, enum in enum_types:
         info = await EnumInfo.fetch(connection, type_name)
         if info is None:
             raise LookupError(f"enum type {type_name} is not in the database; run the migrations")

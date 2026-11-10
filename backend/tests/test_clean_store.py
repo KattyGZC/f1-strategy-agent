@@ -11,9 +11,11 @@ from f1_strategy.adapters.clean_store import (
     Pool,
     PostgresCleanStore,
     PostgresReplayRows,
+    PostgresSessionCatalog,
     connection_pool,
 )
 from f1_strategy.adapters.migrate import upgrade
+from f1_strategy.application.sessions import LoadedSession, SessionDriver, SessionEntry
 from f1_strategy.application.transform import (
     ErrorKind,
     Load,
@@ -370,3 +372,84 @@ async def test_a_database_missing_an_enum_type_fails_the_read_by_name(
     async with pool:
         with pytest.raises(LookupError, match="enum type flag_scope is not in the database"):
             await PostgresReplayRows(pool).timeline_rows(RACE_KEY)
+
+
+def loaded(session: CleanSession) -> LoadedSession:
+    return LoadedSession(
+        session_key=session.session.session_key,
+        session_type=session.session.session_type,
+        session_name=session.session.session_name,
+        date_start=session.session.date_start,
+        year=session.meeting.year,
+        meeting_name=session.meeting.meeting_name,
+        circuit_short_name=session.meeting.circuit_short_name,
+        country_name=session.meeting.country_name,
+    )
+
+
+@pytest.fixture
+async def catalog(postgres_uri: str) -> AsyncIterator[PostgresSessionCatalog]:
+    pool: Pool = connection_pool(postgres_uri, max_size=1, connect_timeout_s=CONNECT_TIMEOUT_S)
+    async with pool:
+        yield PostgresSessionCatalog(pool)
+
+
+@pytest.mark.anyio
+async def test_the_catalog_lists_every_loaded_session_latest_first(
+    store: PostgresCleanStore, catalog: PostgresSessionCatalog
+) -> None:
+    empty = await catalog.sessions()
+    await load_session(store, clean(RACE))
+    await load_session(store, clean(QUALIFYING))
+
+    assert empty == ()
+    assert await catalog.sessions() == (loaded(clean(RACE)), loaded(clean(QUALIFYING)))
+
+
+@pytest.mark.anyio
+async def test_sessions_that_start_together_list_the_higher_key_first(
+    store: PostgresCleanStore, catalog: PostgresSessionCatalog, postgres_uri: str
+) -> None:
+    qualifying = clean(QUALIFYING)
+    await load_session(store, qualifying)
+    await load_session(store, clean(RACE))
+    with psycopg.connect(postgres_uri, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE session SET date_start = %s WHERE session_key = %s",
+            [qualifying.session.date_start, RACE_KEY],
+        )
+
+    assert [session.session_key for session in await catalog.sessions()] == [
+        RACE_KEY,
+        QUALIFYING_KEY,
+    ]
+
+
+@pytest.mark.anyio
+async def test_an_entry_holds_its_session_and_its_drivers_by_number(
+    store: PostgresCleanStore, catalog: PostgresSessionCatalog
+) -> None:
+    race = clean(RACE)
+    await load_session(store, race)
+    await load_session(store, clean(QUALIFYING))
+    drivers = tuple(
+        SessionDriver(
+            driver_number=driver.driver_number,
+            name_acronym=driver.name_acronym,
+            full_name=driver.full_name,
+            team_name=driver.team_name,
+            team_colour=driver.team_colour,
+        )
+        for driver in sorted(race.drivers, key=lambda driver: driver.driver_number)
+    )
+
+    assert await catalog.entry(RACE_KEY) == SessionEntry(loaded(race), drivers)
+
+
+@pytest.mark.anyio
+async def test_a_session_not_loaded_has_no_entry(
+    store: PostgresCleanStore, catalog: PostgresSessionCatalog
+) -> None:
+    await load_session(store, clean(QUALIFYING))
+
+    assert await catalog.entry(RACE_KEY) is None
