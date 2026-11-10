@@ -202,11 +202,40 @@ async def test_an_append_that_does_not_continue_the_stream_is_refused(
     assert await replays.sent(REPLAY) == 1
 
 
-async def test_an_append_to_a_gone_replay_is_refused(redis: Redis) -> None:
-    with pytest.raises(ResponseError, match="the replay is gone"):
-        await store(redis).append("missing", 0, EVENTS[:1])
+async def test_an_append_to_a_gone_replay_appends_nothing(redis: Redis) -> None:
+    assert await store(redis).append("missing", 0, EVENTS[:1]) is False
 
     assert await redis.exists("replay:missing:events") == 0
+
+
+async def test_an_append_reports_that_it_appended(redis: Redis) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+
+    assert await replays.append(REPLAY, 0, EVENTS[:1]) is True
+
+
+async def test_deleting_a_replay_removes_it_and_frees_its_place(redis: Redis) -> None:
+    replays = store(redis, max_active=1)
+    await replays.create(REPLAY, PLAYING)
+    await replays.append(REPLAY, 0, EVENTS[:2])
+    await replays.hold_lease(REPLAY, "owner", 60)
+
+    deleted = await replays.delete(REPLAY)
+
+    assert deleted is True
+    assert await redis.keys("replay:*") == []
+    assert await redis.zrange("replays:active", 0, -1) == []
+    assert await replays.read(REPLAY, None, BLOCK_S) is None
+    assert await replays.create("replay-2", PLAYING) is True
+
+
+async def test_deleting_an_unknown_replay_leaves_the_others(redis: Redis) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+
+    assert await replays.delete("missing") is False
+    assert await replays.state(REPLAY) == PLAYING
 
 
 async def test_one_owner_holds_a_lease_until_it_releases_it(redis: Redis) -> None:

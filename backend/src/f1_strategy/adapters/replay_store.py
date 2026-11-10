@@ -25,6 +25,8 @@ ACTIVE_KEY = "replays:active"
 # leave room for it; past that the update fails loud.
 UPDATE_ATTEMPTS = 5
 MILLISECONDS_PER_S = 1000
+# What APPEND returns, appending nothing, for a replay that is gone.
+GONE = -1
 
 # Drops replays whose idle time ran out, then adds this one unless the limit is reached.
 # Time comes from the Redis server, so every backend process measures the same expiry.
@@ -45,7 +47,7 @@ return 1
 APPEND = """
 local ttl = redis.call('PTTL', KEYS[1])
 if ttl < 0 then
-    return redis.error_reply('the replay is gone')
+    return -1
 end
 local held = redis.call('XLEN', KEYS[2])
 if held ~= tonumber(ARGV[1]) then
@@ -70,6 +72,14 @@ local now = redis.call('TIME')
 local now_ms = now[1] * 1000 + math.floor(now[2] / 1000)
 redis.call('ZADD', KEYS[3], 'XX', now_ms + tonumber(ARGV[1]), ARGV[2])
 return redis.call('GET', KEYS[1])
+"""
+
+# Removes the replay and gives its place back in one step, so no create sees it half gone.
+DELETE = """
+local existed = redis.call('DEL', KEYS[1])
+redis.call('DEL', KEYS[2], KEYS[3])
+redis.call('ZREM', KEYS[4], ARGV[1])
+return existed
 """
 
 HOLD_LEASE = """
@@ -130,6 +140,7 @@ class RedisReplayStore:
         self._idle_ttl_ms = idle_ttl_s * MILLISECONDS_PER_S
         self._create = redis.register_script(CREATE)
         self._append = redis.register_script(APPEND)
+        self._delete = redis.register_script(DELETE)
         self._touch = redis.register_script(TOUCH)
         self._hold_lease = redis.register_script(HOLD_LEASE)
         self._release_lease = redis.register_script(RELEASE_LEASE)
@@ -158,11 +169,19 @@ class RedisReplayStore:
     async def sent(self, replay_id: str) -> int:
         return int(await self._redis.xlen(_events_key(replay_id)))
 
-    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> None:
+    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> bool:
         encoded: list[str | int] = [first_index]
         for event in events:
             encoded.extend([event.kind.value, wire_event(event).model_dump_json()])
-        await self._append(keys=[_state_key(replay_id), _events_key(replay_id)], args=encoded)
+        held = await self._append(
+            keys=[_state_key(replay_id), _events_key(replay_id)], args=encoded
+        )
+        return int(held) != GONE
+
+    async def delete(self, replay_id: str) -> bool:
+        keys = [_state_key(replay_id), _events_key(replay_id), _lease_key(replay_id), ACTIVE_KEY]
+        existed = await self._delete(keys=keys, args=[replay_id])
+        return bool(existed)
 
     async def read(self, replay_id: str, after: str | None, block_s: float) -> StreamRead | None:
         keys = [_state_key(replay_id), _events_key(replay_id), ACTIVE_KEY]
