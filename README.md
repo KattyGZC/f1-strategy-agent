@@ -26,8 +26,8 @@ Phase 2, the clean model:
 Phase 3, the replay (in progress):
 
 - **A replay API** over any session in the clean model: `POST /api/replays` starts one at 1x to 60x, `/pause`, `/resume` and `/speed` control it, and `GET /api/replays/{id}/events` streams its laps, positions, intervals, pits, race control, weather, overtakes and team radio over Server-Sent Events, in the order and at the pace they happened. A viewer that reconnects resumes after its last event. The events go through a Redis stream per replay; the same session always gives the same stream ([ADR 0009](docs/adr/0009-replay-from-the-clean-model.md)).
-- **The loaded sessions**: `GET /api/sessions` lists every session in the clean model, the latest first, and `GET /api/sessions/{session_key}` adds its drivers with their team and colour.
-- **The replay screen** at http://localhost:8080: pick a loaded session and a speed, and watch the timing tower (position, gap, interval, last lap, tyre and age, last pit), the weather and the race control messages move as they did. Pause, resume and change the speed while it plays. Every number on the screen came in an event: the screen keeps the latest value of each, and every race control message.
+- **The loaded sessions**: `GET /api/sessions` lists every session in the clean model with its meeting, the latest first, and `GET /api/sessions/{session_key}` adds its drivers with their team and colour.
+- **The replay screen** at http://localhost:8080: pick a Grand Prix, one of its sessions and a speed, and watch it as it happened: the leader's lap and the latest flag for the whole track, the timing tower (position, interval or gap to the leader, last lap, tyre and its age, last stop), the last lap of the driver you follow with its sectors and speed traps, the weather and race control. Pause, resume and change the speed while it plays. The circuit map and the strategy tools have their place on the screen but are not built yet. Every number on the screen came in an event: the screen keeps the latest value of each, and every race control message.
 
 Jumping to a lap, the simulator and the assistant do not exist yet.
 
