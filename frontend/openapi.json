@@ -13,6 +13,40 @@
         "title": "Compound",
         "type": "string"
       },
+      "DriverResponse": {
+        "properties": {
+          "driver_number": {
+            "title": "Driver Number",
+            "type": "integer"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "name_acronym": {
+            "title": "Name Acronym",
+            "type": "string"
+          },
+          "team_colour": {
+            "description": "RGB in hex, without the leading #",
+            "title": "Team Colour",
+            "type": "string"
+          },
+          "team_name": {
+            "title": "Team Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "driver_number",
+          "name_acronym",
+          "full_name",
+          "team_name",
+          "team_colour"
+        ],
+        "title": "DriverResponse",
+        "type": "object"
+      },
       "ErrorResponse": {
         "properties": {
           "detail": {
@@ -722,6 +756,138 @@
         "title": "ServerSentEvent",
         "type": "object"
       },
+      "SessionEntryResponse": {
+        "properties": {
+          "circuit_short_name": {
+            "title": "Circuit Short Name",
+            "type": "string"
+          },
+          "country_name": {
+            "title": "Country Name",
+            "type": "string"
+          },
+          "date_start": {
+            "format": "date-time",
+            "title": "Date Start",
+            "type": "string"
+          },
+          "drivers": {
+            "description": "By driver number",
+            "items": {
+              "$ref": "#/components/schemas/DriverResponse"
+            },
+            "title": "Drivers",
+            "type": "array"
+          },
+          "meeting_key": {
+            "title": "Meeting Key",
+            "type": "integer"
+          },
+          "meeting_name": {
+            "title": "Meeting Name",
+            "type": "string"
+          },
+          "session_key": {
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "session_name": {
+            "$ref": "#/components/schemas/SessionName"
+          },
+          "session_type": {
+            "$ref": "#/components/schemas/SessionType"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_key",
+          "session_type",
+          "session_name",
+          "date_start",
+          "meeting_key",
+          "year",
+          "meeting_name",
+          "circuit_short_name",
+          "country_name",
+          "drivers"
+        ],
+        "title": "SessionEntryResponse",
+        "type": "object"
+      },
+      "SessionName": {
+        "enum": [
+          "Qualifying",
+          "Sprint Qualifying",
+          "Race",
+          "Sprint"
+        ],
+        "title": "SessionName",
+        "type": "string"
+      },
+      "SessionResponse": {
+        "properties": {
+          "circuit_short_name": {
+            "title": "Circuit Short Name",
+            "type": "string"
+          },
+          "country_name": {
+            "title": "Country Name",
+            "type": "string"
+          },
+          "date_start": {
+            "format": "date-time",
+            "title": "Date Start",
+            "type": "string"
+          },
+          "meeting_key": {
+            "title": "Meeting Key",
+            "type": "integer"
+          },
+          "meeting_name": {
+            "title": "Meeting Name",
+            "type": "string"
+          },
+          "session_key": {
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "session_name": {
+            "$ref": "#/components/schemas/SessionName"
+          },
+          "session_type": {
+            "$ref": "#/components/schemas/SessionType"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_key",
+          "session_type",
+          "session_name",
+          "date_start",
+          "meeting_key",
+          "year",
+          "meeting_name",
+          "circuit_short_name",
+          "country_name"
+        ],
+        "title": "SessionResponse",
+        "type": "object"
+      },
+      "SessionType": {
+        "enum": [
+          "Practice",
+          "Qualifying",
+          "Race"
+        ],
+        "title": "SessionType",
+        "type": "string"
+      },
       "SpeedRequest": {
         "properties": {
           "speed": {
@@ -1292,6 +1458,85 @@
         "summary": "Set Replay Speed",
         "tags": [
           "replays"
+        ]
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "description": "Every session loaded in the clean model, the latest first.",
+        "operationId": "list_sessions_api_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionResponse"
+                  },
+                  "title": "Response List Sessions Api Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_key}": {
+      "get": {
+        "operationId": "read_session_api_sessions__session_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_key",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Session Key",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Session",
+        "tags": [
+          "sessions"
         ]
       }
     }

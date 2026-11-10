@@ -26,8 +26,10 @@ Fase 2, el modelo limpio:
 Fase 3, el replay (en curso):
 
 - **Una API de replay** sobre cualquier sesión del modelo limpio: `POST /api/replays` inicia uno de 1x a 60x, `/pause`, `/resume` y `/speed` lo controlan, y `GET /api/replays/{id}/events` transmite sus vueltas, posiciones, intervalos, paradas, control de carrera, clima, adelantamientos y radio del equipo por Server-Sent Events, en el orden y al ritmo en que ocurrieron. Un espectador que se reconecta sigue después de su último evento. Los eventos pasan por un stream de Redis por replay; la misma sesión da siempre el mismo stream ([ADR 0009](docs/adr/0009-replay-from-the-clean-model.md)).
+- **Las sesiones cargadas**: `GET /api/sessions` lista todas las sesiones del modelo limpio con su Gran Premio, la más reciente primero, y `GET /api/sessions/{session_key}` añade sus pilotos con su equipo y su color.
+- **La pantalla del replay** en http://localhost:8080: elige un Gran Premio, una de sus sesiones y una velocidad, y mírala tal como ocurrió: la vuelta del líder y la última bandera de toda la pista, la timing tower (posición, intervalo o gap al líder, última vuelta, neumático y su edad, última parada), la última vuelta del piloto que sigues con sus sectores y trampas de velocidad, el clima y el control de carrera. Pausa, reanuda y cambia la velocidad mientras se reproduce. El mapa del circuito y las herramientas de estrategia tienen su lugar en la pantalla, pero aún no están construidos. Cada número de la pantalla llegó en un evento: la pantalla guarda el último valor de cada uno y todos los mensajes de control de carrera.
 
-La pantalla del replay, el simulador y el asistente todavía no existen.
+Saltar a una vuelta, el simulador y el asistente todavía no existen.
 
 ## Ejecutarlo en local
 
@@ -38,7 +40,7 @@ cp .env.example .env
 make up
 ```
 
-Abre http://localhost:8080. `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`, y uno copiado antes de la fase 3 las líneas `POSTGRES_POOL_SIZE`, `REDIS_*` y `REPLAY_*`.
+Abre http://localhost:8080; la pantalla del replay lista las sesiones cargadas con `make transform` (más abajo). `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`, y uno copiado antes de la fase 3 las líneas `POSTGRES_POOL_SIZE`, `REDIS_*` y `REPLAY_*`.
 
 Con el stack levantado, ingiere datos crudos:
 

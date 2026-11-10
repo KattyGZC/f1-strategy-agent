@@ -1,13 +1,14 @@
 """Replay routes: start and control a replay over REST, watch it over SSE (ADR 0009)."""
 
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Path, Request, status
+from fastapi import APIRouter, Depends, Header, Path, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, Field
 
-from f1_strategy.adapters.http.services import ReplayServices
+from f1_strategy.adapters.http.responses import NOT_FOUND, UNAVAILABLE, ErrorResponse, Responses
+from f1_strategy.adapters.http.services import Services
 from f1_strategy.adapters.replay_events import ReplayEvent, ReplayFailedEvent
 from f1_strategy.application.replay import ReplayFailure, ReplayStatus, StreamEntry
 from f1_strategy.domain.playback import Paused, PlaybackStatus, ReplaySpeed
@@ -16,10 +17,6 @@ REPLAY_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 STREAM_ID_PATTERN = r"^\d+-\d+$"
 
 router = APIRouter(tags=["replays"])
-
-
-class ErrorResponse(BaseModel):
-    detail: str
 
 
 class StartReplayRequest(BaseModel):
@@ -40,19 +37,7 @@ class ReplayResponse(BaseModel):
     failure: str | None
 
 
-def services(request: Request) -> ReplayServices:
-    replays = getattr(request.app.state, "replays", None)
-    if not isinstance(replays, ReplayServices):
-        raise RuntimeError("the replay services are not running; start the app with its lifespan")  # noqa: TRY004 - a missing lifespan, not a bad argument
-    return replays
-
-
-Services = Annotated[ReplayServices, Depends(services)]
 ReplayId = Annotated[str, Path(pattern=REPLAY_ID_PATTERN)]
-# FastAPI types `responses` with Any values; a narrower type is rejected by its signature.
-type Responses = dict[int | str, dict[str, Any]]
-NOT_FOUND: Responses = {status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}}
-UNAVAILABLE: Responses = {status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse}}
 # An error before the stream starts is JSON; FastAPI would file a response model under the
 # route's media type, so the schema is referenced instead.
 STREAM_NOT_FOUND: Responses = {
@@ -72,42 +57,42 @@ STREAM_NOT_FOUND: Responses = {
     status_code=status.HTTP_201_CREATED,
     responses={**NOT_FOUND, **UNAVAILABLE},
 )
-async def start_replay(body: StartReplayRequest, replays: Services) -> ReplayResponse:
-    replay_id = await replays.start(body.session_key, body.speed)
-    return _response(replay_id, await replays.control.status(replay_id))
+async def start_replay(body: StartReplayRequest, services: Services) -> ReplayResponse:
+    replay_id = await services.start(body.session_key, body.speed)
+    return _response(replay_id, await services.control.status(replay_id))
 
 
 @router.get("/replays/{replay_id}", responses=NOT_FOUND)
-async def read_replay(replay_id: ReplayId, replays: Services) -> ReplayResponse:
-    return _response(replay_id, await replays.control.status(replay_id))
+async def read_replay(replay_id: ReplayId, services: Services) -> ReplayResponse:
+    return _response(replay_id, await services.control.status(replay_id))
 
 
 @router.post("/replays/{replay_id}/pause", responses=NOT_FOUND)
-async def pause_replay(replay_id: ReplayId, replays: Services) -> ReplayResponse:
-    return _response(replay_id, await replays.control.pause(replay_id))
+async def pause_replay(replay_id: ReplayId, services: Services) -> ReplayResponse:
+    return _response(replay_id, await services.control.pause(replay_id))
 
 
 @router.post("/replays/{replay_id}/resume", responses=NOT_FOUND)
-async def resume_replay(replay_id: ReplayId, replays: Services) -> ReplayResponse:
-    return _response(replay_id, await replays.control.resume(replay_id))
+async def resume_replay(replay_id: ReplayId, services: Services) -> ReplayResponse:
+    return _response(replay_id, await services.control.resume(replay_id))
 
 
 @router.put("/replays/{replay_id}/speed", responses=NOT_FOUND)
 async def set_replay_speed(
-    replay_id: ReplayId, body: SpeedRequest, replays: Services
+    replay_id: ReplayId, body: SpeedRequest, services: Services
 ) -> ReplayResponse:
-    return _response(replay_id, await replays.control.set_speed(replay_id, body.speed))
+    return _response(replay_id, await services.control.set_speed(replay_id, body.speed))
 
 
 async def _watched(
     replay_id: ReplayId,
-    replays: Services,
+    services: Services,
     last_event_id: Annotated[
         str | None, Header(alias="Last-Event-ID", pattern=STREAM_ID_PATTERN)
     ] = None,
 ) -> AsyncIterator[StreamEntry | ReplayFailure]:
     # A dependency, so an unknown replay is a 404 before the stream starts.
-    return await replays.watch(replay_id, last_event_id)
+    return await services.watch(replay_id, last_event_id)
 
 
 @router.get(

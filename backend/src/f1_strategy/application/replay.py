@@ -27,7 +27,8 @@ from f1_strategy.domain.replay import Event, EventKind, Timeline, TimelineRows, 
 
 
 class SessionNotLoadedError(LookupError):
-    pass
+    def __init__(self, session_key: int) -> None:
+        super().__init__(f"session {session_key} is not in the clean model")
 
 
 class ReplayNotFoundError(LookupError):
@@ -231,7 +232,7 @@ class ProduceReplay:
     async def _timeline(self, session_key: int) -> Timeline:
         rows = await self._rows.timeline_rows(session_key)
         if rows is None:
-            raise SessionNotLoadedError(f"session {session_key} is not in the clean model")
+            raise SessionNotLoadedError(session_key)
         # About 50 ms of CPU for a race's 30,000 events (measured 2026-11-04); a thread keeps
         # every other replay's stream moving meanwhile.
         return await asyncio.to_thread(timeline, rows)
@@ -295,7 +296,7 @@ class StartReplay:
 
     async def __call__(self, session_key: int, speed: ReplaySpeed) -> str:
         if not await self._rows.is_loaded(session_key):
-            raise SessionNotLoadedError(f"session {session_key} is not in the clean model")
+            raise SessionNotLoadedError(session_key)
         replay_id = self._new_id()
         state = ReplayState(session_key, started(speed, self._clock()))
         if not await self._store.create(replay_id, state):

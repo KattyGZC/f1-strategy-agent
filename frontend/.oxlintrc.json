@@ -8,7 +8,10 @@
     "react/only-export-components": ["warn", { "allowConstantExport": true }],
     // tsconfig uses the automatic JSX runtime (jsx: react-jsx), so React need not be in scope.
     "react/react-in-jsx-scope": "off",
-    "import/no-unassigned-import": ["error", { "allow": ["@testing-library/jest-dom/vitest"] }],
+    "import/no-unassigned-import": [
+      "error",
+      { "allow": ["@testing-library/jest-dom/vitest", "**/*.css"] }
+    ],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "eslint/no-console": "error"

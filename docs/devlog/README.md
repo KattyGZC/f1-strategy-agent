@@ -16,6 +16,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-10-29 | [01. Phase 3: replay API](2026-10-29-01-phase-3-replay-api.md) |
 | 2026-11-05 | [01. Quality gates for agent-written code](2026-11-05-01-quality-gates.md) |
 | 2026-11-05 | [02. Domain mutants](2026-11-05-02-domain-mutants.md) |
+| 2026-11-05 | [03. Phase 3: replay screen](2026-11-05-03-phase-3-replay-screen.md) |
 
 ## Template
 
