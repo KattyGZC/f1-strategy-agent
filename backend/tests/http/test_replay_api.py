@@ -1,105 +1,20 @@
 import asyncio
 import json
-from collections.abc import Iterator
-from contextlib import AbstractAsyncContextManager
 from dataclasses import replace
-from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr, TypeAdapter
 from redis.asyncio import Redis
 
-from f1_strategy.adapters.clean_store import PostgresCleanStore, connection_pool
 from f1_strategy.adapters.http.app import create_app
-from f1_strategy.adapters.http.services import ReplayServices, replay_services
-from f1_strategy.adapters.migrate import upgrade
 from f1_strategy.adapters.replay_events import ReplayEvent, wire_event
 from f1_strategy.adapters.replay_store import RedisReplayStore
 from f1_strategy.adapters.settings import ApiSettings
-from f1_strategy.application.transform import Load, Version
-from f1_strategy.domain.clean import CleanSession, clean_session, content_hash
-from f1_strategy.domain.replay import LapCompleted, timeline
-from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
-from tests.samples import RACE, sample
+from tests.http.api import EVENTS, SESSION
 
-SESSION = int(RACE)
 UNKNOWN_SESSION = 9999
 WIRE = TypeAdapter(ReplayEvent)
-WINDOW = timedelta(seconds=60)
-
-
-def first_minute(session: CleanSession) -> CleanSession:
-    """The session cut to its first minute of events, so a replay at 60x lasts one second."""
-    cutoff = timeline(session).events[0].at + WINDOW
-    ended_laps = {
-        (event.payload.lap.driver_number, event.payload.lap.lap_number)
-        for event in timeline(session).events
-        if isinstance(event.payload, LapCompleted) and event.at < cutoff
-    }
-    return replace(
-        session,
-        laps=tuple(
-            lap for lap in session.laps if (lap.driver_number, lap.lap_number) in ended_laps
-        ),
-        pits=tuple(row for row in session.pits if row.date < cutoff),
-        intervals=tuple(row for row in session.intervals if row.date < cutoff),
-        positions=tuple(row for row in session.positions if row.date < cutoff),
-        race_control=tuple(row for row in session.race_control if row.date < cutoff),
-        weather=tuple(row for row in session.weather if row.date < cutoff),
-        overtakes=tuple(row for row in session.overtakes if row.date < cutoff),
-        team_radio=tuple(row for row in session.team_radio if row.date < cutoff),
-    )
-
-
-SHORT_RACE = first_minute(clean_session(sample(RACE).raw()))
-EVENTS = timeline(SHORT_RACE).events
-
-
-async def load(postgres_uri: str, session: CleanSession) -> None:
-    async with connection_pool(postgres_uri, 1, CONNECT_TIMEOUT_S) as pool:
-        store = PostgresCleanStore(pool)
-        version = Version("input-1", "1")
-        async with store.claim(SESSION, version, EVENTS[0].at) as claim:
-            assert claim is not None
-            await claim.replace(Load(session, version, content_hash(session), EVENTS[0].at))
-
-
-async def flush(redis_uri: str) -> None:
-    client = Redis.from_url(redis_uri)
-    await client.flushdb()
-    await client.aclose()
-
-
-@pytest.fixture
-def settings(postgres_server_uri: str, redis_server_uri: str) -> ApiSettings:
-    postgres_uri = fresh_database(postgres_server_uri)
-    upgrade(postgres_uri, CONNECT_TIMEOUT_S)
-    asyncio.run(load(postgres_uri, SHORT_RACE), loop_factory=asyncio.SelectorEventLoop)
-    asyncio.run(flush(redis_server_uri))
-    return ApiSettings(
-        postgres_uri=SecretStr(postgres_uri),
-        postgres_connect_timeout_s=CONNECT_TIMEOUT_S,
-        postgres_pool_size=2,
-        redis_uri=SecretStr(redis_server_uri),
-        redis_max_connections=8,
-        redis_timeout_s=5,
-        replay_max_active=2,
-        replay_idle_ttl_s=60,
-        replay_tick_s=0.02,
-        replay_lease_s=1,
-    )
-
-
-@pytest.fixture
-def client(settings: ApiSettings) -> Iterator[TestClient]:
-    def services() -> AbstractAsyncContextManager[ReplayServices]:
-        return replay_services(settings)
-
-    # psycopg's async driver needs the selector loop, also in the test client's thread.
-    options = {"loop_factory": asyncio.SelectorEventLoop}
-    with TestClient(create_app(services), backend_options=options) as test_client:
-        yield test_client
 
 
 def start(client: TestClient, speed: int = 60) -> str:
@@ -258,8 +173,11 @@ def test_a_failed_replay_ends_its_stream_with_the_failure(
     assert client.get(f"/api/replays/{replay_id}").json()["failure"] == "boom"
 
 
-def test_the_app_without_its_lifespan_has_no_replay_services() -> None:
-    with pytest.raises(RuntimeError, match="not running"):
+def test_the_app_without_its_lifespan_has_no_services() -> None:
+    with pytest.raises(
+        RuntimeError,
+        match=r"^the API services are not running; start the app with its lifespan$",
+    ):
         TestClient(create_app()).get("/api/replays/abc")
 
 

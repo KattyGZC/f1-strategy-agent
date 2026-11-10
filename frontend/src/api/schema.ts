@@ -128,6 +128,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description Every session loaded in the clean model, the latest first.
+         */
+        get: operations["list_sessions_api_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Session */
+        get: operations["read_session_api_sessions__session_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -137,6 +174,22 @@ export interface components {
          * @enum {string}
          */
         Compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN";
+        /** DriverResponse */
+        DriverResponse: {
+            /** Driver Number */
+            driver_number: number;
+            /** Full Name */
+            full_name: string;
+            /** Name Acronym */
+            name_acronym: string;
+            /**
+             * Team Colour
+             * @description RGB in hex, without the leading #
+             */
+            team_colour: string;
+            /** Team Name */
+            team_name: string;
+        };
         /** ErrorResponse */
         ErrorResponse: {
             /** Detail */
@@ -383,6 +436,61 @@ export interface components {
             /** Retry */
             retry?: number | null;
         };
+        /** SessionEntryResponse */
+        SessionEntryResponse: {
+            /** Circuit Short Name */
+            circuit_short_name: string;
+            /** Country Name */
+            country_name: string;
+            /**
+             * Date Start
+             * Format: date-time
+             */
+            date_start: string;
+            /**
+             * Drivers
+             * @description By driver number
+             */
+            drivers: components["schemas"]["DriverResponse"][];
+            /** Meeting Name */
+            meeting_name: string;
+            /** Session Key */
+            session_key: number;
+            session_name: components["schemas"]["SessionName"];
+            session_type: components["schemas"]["SessionType"];
+            /** Year */
+            year: number;
+        };
+        /**
+         * SessionName
+         * @enum {string}
+         */
+        SessionName: "Qualifying" | "Sprint Qualifying" | "Race" | "Sprint";
+        /** SessionResponse */
+        SessionResponse: {
+            /** Circuit Short Name */
+            circuit_short_name: string;
+            /** Country Name */
+            country_name: string;
+            /**
+             * Date Start
+             * Format: date-time
+             */
+            date_start: string;
+            /** Meeting Name */
+            meeting_name: string;
+            /** Session Key */
+            session_key: number;
+            session_name: components["schemas"]["SessionName"];
+            session_type: components["schemas"]["SessionType"];
+            /** Year */
+            year: number;
+        };
+        /**
+         * SessionType
+         * @enum {string}
+         */
+        SessionType: "Practice" | "Qualifying" | "Race";
         /** SpeedRequest */
         SpeedRequest: {
             speed: components["schemas"]["ReplaySpeed"];
@@ -714,6 +822,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sessions_api_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"][];
+                };
+            };
+        };
+    };
+    read_session_api_sessions__session_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionEntryResponse"];
                 };
             };
             /** @description Not Found */
