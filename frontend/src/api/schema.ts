@@ -49,7 +49,11 @@ export interface paths {
         get: operations["read_replay_api_replays__replay_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Stop Replay
+         * @description Removes the replay and frees its place; its event stream ends.
+         */
+        delete: operations["stop_replay_api_replays__replay_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -661,6 +665,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ReplayResponse"];
                 };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_replay_api_replays__replay_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not Found */
             404: {

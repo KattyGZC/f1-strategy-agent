@@ -11,7 +11,7 @@ import type { OpenEventStream } from './stream.ts'
 type Schemas = components['schemas']
 
 type ScreenState =
-  | { kind: 'choosing'; error: string | null }
+  | { kind: 'choosing'; alert: string | null }
   | { kind: 'starting' }
   | {
       kind: 'watching'
@@ -19,19 +19,31 @@ type ScreenState =
       entry: Schemas['SessionEntryResponse']
     }
 
+const CHOOSING: ScreenState = { kind: 'choosing', alert: null }
+const HTTP_NOT_FOUND = 404
+
 interface Props {
   client: ApiClient
   openStream: OpenEventStream
 }
 
 export function ReplayScreen({ client, openStream }: Readonly<Props>) {
-  const [screen, setScreen] = useState<ScreenState>({ kind: 'choosing', error: null })
+  const [screen, setScreen] = useState<ScreenState>(CHOOSING)
 
   const start = (sessionKey: number, speed: ReplaySpeed) => {
     setScreen({ kind: 'starting' })
     startReplay(client, sessionKey, speed)
       .then(setScreen)
-      .catch(() => setScreen({ kind: 'choosing', error: UNREACHABLE }))
+      .catch(() => setScreen(notStarted(UNREACHABLE)))
+  }
+
+  const leave = (replayId: string) => {
+    setScreen(CHOOSING)
+    void stopReplay(client, replayId).then((problem) => {
+      if (problem !== null) {
+        setScreen((now) => (now.kind === 'choosing' ? notStopped(problem) : now))
+      }
+    })
   }
 
   if (screen.kind === 'watching') {
@@ -42,16 +54,16 @@ export function ReplayScreen({ client, openStream }: Readonly<Props>) {
         openStream={openStream}
         replay={screen.replay}
         entry={screen.entry}
-        onLeave={() => setScreen({ kind: 'choosing', error: null })}
+        onLeave={() => leave(screen.replay.replay_id)}
       />
     )
   }
   return (
     <>
       <SessionPicker client={client} starting={screen.kind === 'starting'} onStart={start} />
-      {screen.kind === 'choosing' && screen.error !== null ? (
+      {screen.kind === 'choosing' && screen.alert !== null ? (
         <p className="notice" role="alert">
-          The replay did not start: {screen.error}
+          {screen.alert}
         </p>
       ) : null}
     </>
@@ -68,11 +80,36 @@ async function startReplay(
     params: { path: { session_key: sessionKey } },
   })
   if (!read.data) {
-    return { kind: 'choosing', error: failureMessage(read.error, read.response) }
+    return notStarted(failureMessage(read.error, read.response))
   }
   const started = await client.POST('/api/replays', { body: { session_key: sessionKey, speed } })
   if (!started.data) {
-    return { kind: 'choosing', error: failureMessage(started.error, started.response) }
+    return notStarted(failureMessage(started.error, started.response))
   }
   return { kind: 'watching', replay: started.data, entry: read.data }
+}
+
+/** Why the replay could not be stopped, or null once it is gone, already gone included. */
+async function stopReplay(client: ApiClient, replayId: string): Promise<string | null> {
+  try {
+    const { error, response } = await client.DELETE('/api/replays/{replay_id}', {
+      params: { path: { replay_id: replayId } },
+    })
+    return response.ok || response.status === HTTP_NOT_FOUND
+      ? null
+      : failureMessage(error, response)
+  } catch {
+    return UNREACHABLE
+  }
+}
+
+function notStarted(reason: string): ScreenState {
+  return { kind: 'choosing', alert: `The replay did not start: ${reason}` }
+}
+
+function notStopped(reason: string): ScreenState {
+  return {
+    kind: 'choosing',
+    alert: `The last replay could not be stopped (${reason}); it ends on its own after a few idle minutes.`,
+  }
 }

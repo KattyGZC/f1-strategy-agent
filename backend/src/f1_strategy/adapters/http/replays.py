@@ -84,6 +84,12 @@ async def set_replay_speed(
     return _response(replay_id, await services.control.set_speed(replay_id, body.speed))
 
 
+@router.delete("/replays/{replay_id}", status_code=status.HTTP_204_NO_CONTENT, responses=NOT_FOUND)
+async def stop_replay(replay_id: ReplayId, services: Services) -> None:
+    """Removes the replay and frees its place; its event stream ends."""
+    await services.control.stop(replay_id)
+
+
 async def _watched(
     replay_id: ReplayId,
     services: Services,
