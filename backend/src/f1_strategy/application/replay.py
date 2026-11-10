@@ -98,7 +98,14 @@ class ReplayStore(Protocol):
         """How many events of the timeline the replay's stream holds."""
         ...
 
-    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> None: ...
+    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> bool:
+        """False, appending nothing, when the replay is gone."""
+        ...
+
+    async def delete(self, replay_id: str) -> bool:
+        """Remove the replay, its stream and its lease, freeing its place among the active
+        replays; False when it did not exist."""
+        ...
 
     async def read(self, replay_id: str, after: str | None, block_s: float) -> StreamRead | None:
         """The entries after the id `after` (from the start when None), waiting up to `block_s`
@@ -164,6 +171,11 @@ class ControlReplay:
         now = self._clock()
         return await self._change(replay_id, now, lambda playback: with_speed(playback, speed, now))
 
+    async def stop(self, replay_id: str) -> None:
+        """Its producer and its viewers end as they would at its expiry."""
+        if not await self._store.delete(replay_id):
+            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
+
     async def _change(
         self, replay_id: str, now: float, change: Callable[[Playback], Playback]
     ) -> ReplayStatus:
@@ -215,19 +227,31 @@ class ProduceReplay:
         offsets = offsets_s(built)
         sent = await self._store.sent(replay_id)
         while sent < len(built.events):
-            if not await self._hold(replay_id):
-                return ReplayEnd.LEASE_LOST
-            state = await self._store.state(replay_id)
-            if state is None:
-                return ReplayEnd.EXPIRED
-            now = self._clock()
-            due = due_until(state.playback, offsets, sent, now)
-            if due > sent:
-                await self._store.append(replay_id, sent, built.events[sent:due])
-                sent = due
-            if sent < len(built.events):
-                await self._clock.sleep(self._wait_s(state.playback, offsets[sent], now))
+            step = await self._tick(replay_id, built.events, offsets, sent)
+            if isinstance(step, ReplayEnd):
+                return step
+            sent = step
         return ReplayEnd.FINISHED
+
+    async def _tick(
+        self, replay_id: str, events: Sequence[Event], offsets: Sequence[float], sent: int
+    ) -> int | ReplayEnd:
+        """Appends what is due and waits for the next event; how many events are sent now, or
+        why the replay ended."""
+        if not await self._hold(replay_id):
+            return ReplayEnd.LEASE_LOST
+        state = await self._store.state(replay_id)
+        if state is None:
+            return ReplayEnd.EXPIRED
+        now = self._clock()
+        due = due_until(state.playback, offsets, sent, now)
+        if due > sent:
+            if not await self._store.append(replay_id, sent, events[sent:due]):
+                return ReplayEnd.EXPIRED
+            sent = due
+        if sent < len(events):
+            await self._clock.sleep(self._wait_s(state.playback, offsets[sent], now))
+        return sent
 
     async def _timeline(self, session_key: int) -> Timeline:
         rows = await self._rows.timeline_rows(session_key)

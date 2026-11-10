@@ -118,11 +118,19 @@ class MemoryStore:
     async def sent(self, replay_id: str) -> int:
         return len(self.streams.get(replay_id, []))
 
-    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> None:
+    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> bool:
+        if replay_id not in self.states:
+            return False
         stream = self.streams[replay_id]
         assert first_index == len(stream), "an append must continue the stream exactly"
         now_s = self._clock()
         stream.extend(Sent(first_index + i, event, now_s) for i, event in enumerate(events))
+        return True
+
+    async def delete(self, replay_id: str) -> bool:
+        self.streams.pop(replay_id, None)
+        self.leases.pop(replay_id, None)
+        return self.states.pop(replay_id, None) is not None
 
     async def read(self, replay_id: str, after: str | None, block_s: float) -> StreamRead | None:
         assert block_s == POLICY.tick_s
@@ -151,6 +159,22 @@ class MemoryStore:
 
     def events(self, replay_id: str = REPLAY) -> list[Event]:
         return [sent.event for sent in self.streams[replay_id]]
+
+
+class StoppedBeforeAppend(MemoryStore):
+    """Stops the replay right after the producer's first read of it inside its loop, so its
+    next append finds the replay gone."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        super().__init__(clock)
+        self.state_reads = 0
+
+    async def state(self, replay_id: str) -> ReplayState | None:
+        read = await super().state(replay_id)
+        self.state_reads += 1
+        if self.state_reads == 2:
+            await self.delete(replay_id)
+        return read
 
 
 class MemoryRows:
@@ -323,6 +347,18 @@ async def test_a_replay_that_expires_stops_its_producer() -> None:
     assert w.store.times() == [(0, 1000.0), (1, 1001.5)]
 
 
+async def test_a_replay_stopped_just_before_an_append_ends_its_producer() -> None:
+    clock = ScriptedClock()
+    w = World(clock, StoppedBeforeAppend(clock), MemoryRows({SESSION: positions_at(OFFSETS_S)}))
+    w.begin(ReplaySpeed.X1)
+
+    end = await w.produce(REPLAY)
+
+    assert end is ReplayEnd.EXPIRED
+    assert w.store.streams == {}
+    assert w.store.leases == {}
+
+
 async def test_a_replay_gone_before_its_producer_starts_is_expired() -> None:
     w = world()
 
@@ -366,14 +402,30 @@ async def test_controls_report_the_new_state_and_session_time() -> None:
     assert later == ReplayStatus(ReplayState(SESSION, Playing(ReplaySpeed.X5, 4.0, 1004.0)), 14.0)
 
 
-@pytest.mark.parametrize("control", ["pause", "resume", "set_speed", "status"])
+async def test_stopping_a_replay_removes_it_and_frees_its_place() -> None:
+    w = world(max_active=1)
+    w.begin(ReplaySpeed.X1)
+    w.store.leases[REPLAY] = OWNER
+
+    await w.control.stop(REPLAY)
+
+    assert (w.store.states, w.store.streams, w.store.leases) == ({}, {}, {})
+    assert await w.store.create("replay-2", ReplayState(SESSION, started(ReplaySpeed.X1, 0.0)))
+    with pytest.raises(
+        ReplayNotFoundError, match=f"^replay {REPLAY} does not exist or has expired$"
+    ):
+        await w.control.status(REPLAY)
+
+
+@pytest.mark.parametrize("control", ["pause", "resume", "set_speed", "status", "stop"])
 async def test_a_control_of_an_unknown_replay_fails(control: str) -> None:
     w = world()
-    calls = {
+    calls: dict[str, Callable[[], Awaitable[object]]] = {
         "pause": lambda: w.control.pause("missing"),
         "resume": lambda: w.control.resume("missing"),
         "set_speed": lambda: w.control.set_speed("missing", ReplaySpeed.X2),
         "status": lambda: w.control.status("missing"),
+        "stop": lambda: w.control.stop("missing"),
     }
 
     with pytest.raises(ReplayNotFoundError, match="missing"):
