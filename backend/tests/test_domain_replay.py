@@ -99,7 +99,7 @@ def shuffled(clean: CleanSession, seed: int) -> Rows:
 
 
 def test_an_empty_session_has_an_empty_timeline() -> None:
-    assert timeline(Rows()) == Timeline((), 0)
+    assert timeline(Rows()) == Timeline((), 0, {})
 
 
 def test_a_lap_happens_when_it_ends() -> None:
@@ -126,6 +126,34 @@ def test_a_lap_without_an_end_is_counted_not_emitted(missing: Lap) -> None:
 
     assert result.laps_without_instant == 1
     assert [event.payload for event in result.events] == [LapCompleted(lap(1, 2), None, None)]
+
+
+def test_a_lap_starts_at_its_earliest_start_among_drivers() -> None:
+    rows = Rows(
+        laps=[
+            lap(16, 2, date_start=T0 + timedelta(seconds=1.2)),
+            lap(1, 2, date_start=T0),
+            lap(44, 2, date_start=T0 + timedelta(seconds=3)),
+            lap(1, 1, date_start=T0 - timedelta(seconds=95)),
+        ]
+    )
+
+    assert timeline(rows).lap_starts == {1: T0 - timedelta(seconds=95), 2: T0}
+
+
+def test_a_lap_with_a_start_and_no_duration_still_starts() -> None:
+    rows = Rows(laps=[lap(1, 1, lap_duration=None)])
+
+    result = timeline(rows)
+
+    assert result.events == ()
+    assert result.lap_starts == {1: T0}
+
+
+def test_a_lap_no_driver_has_a_start_for_has_no_start() -> None:
+    rows = Rows(laps=[lap(1, 4, date_start=None), lap(16, 4, date_start=None), lap(1, 5)])
+
+    assert timeline(rows).lap_starts == {5: T0}
 
 
 def test_a_lap_carries_its_stint_tyre_and_age() -> None:
