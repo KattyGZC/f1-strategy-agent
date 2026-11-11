@@ -69,6 +69,7 @@ services:
       REPLAY_IDLE_TTL_S: ${REPLAY_IDLE_TTL_S:?}
       REPLAY_TICK_S: ${REPLAY_TICK_S:?}
       REPLAY_LEASE_S: ${REPLAY_LEASE_S:?}
+      REPLAY_APPEND_BATCH: ${REPLAY_APPEND_BATCH:?}
     depends_on:
       postgres:
         condition: service_healthy

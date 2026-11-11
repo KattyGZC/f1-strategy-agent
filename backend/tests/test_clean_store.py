@@ -444,7 +444,20 @@ async def test_an_entry_holds_its_session_and_its_drivers_by_number(
         for driver in sorted(race.drivers, key=lambda driver: driver.driver_number)
     )
 
-    assert await catalog.entry(RACE_KEY) == SessionEntry(loaded(race), drivers)
+    assert await catalog.entry(RACE_KEY) == SessionEntry(loaded(race), drivers, 4)
+
+
+@pytest.mark.anyio
+async def test_an_entry_without_laps_has_no_last_lap(
+    store: PostgresCleanStore, catalog: PostgresSessionCatalog
+) -> None:
+    race = replace(clean(RACE), laps=())
+    await load_session(store, race)
+
+    entry = await catalog.entry(RACE_KEY)
+
+    assert entry is not None
+    assert entry.last_lap_number is None
 
 
 @pytest.mark.anyio

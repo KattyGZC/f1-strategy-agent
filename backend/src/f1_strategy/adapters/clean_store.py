@@ -64,6 +64,7 @@ DRIVERS_QUERY = """
     SELECT driver_number, name_acronym, full_name, team_name, team_colour
     FROM driver_session WHERE session_key = %s ORDER BY driver_number
 """
+LAST_LAP_QUERY = "SELECT max(lap_number) FROM lap WHERE session_key = %s"
 
 RUN_COLUMNS = (
     "status, input_fingerprint, transform_version, error_kind, loaded_fingerprint, loaded_version"
@@ -325,7 +326,16 @@ class PostgresSessionCatalog:
                 return None
             async with connection.cursor(row_factory=class_row(SessionDriver)) as cursor:
                 await cursor.execute(DRIVERS_QUERY, [session_key])
-                return SessionEntry(session, tuple(await cursor.fetchall()))
+                drivers = tuple(await cursor.fetchall())
+            return SessionEntry(session, drivers, await _last_lap_number(connection, session_key))
+
+
+async def _last_lap_number(connection: AsyncConnection[TupleRow], session_key: int) -> int | None:
+    cursor = await connection.execute(LAST_LAP_QUERY, [session_key])
+    row = await cursor.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return int(row[0])
 
 
 async def _is_loaded(connection: AsyncConnection[TupleRow], session_key: int) -> bool:

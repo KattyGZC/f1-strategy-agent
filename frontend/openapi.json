@@ -634,6 +634,33 @@
         "title": "ReplayFailedEvent",
         "type": "object"
       },
+      "ReplayResetEvent": {
+        "additionalProperties": false,
+        "description": "The replay moved to the start of a lap: what was built is dropped, and the events that\nfollow rebuild the session from its start up to `session_s`.",
+        "properties": {
+          "kind": {
+            "const": "replay_reset",
+            "default": "replay_reset",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lap_number": {
+            "title": "Lap Number",
+            "type": "integer"
+          },
+          "session_s": {
+            "description": "Seconds since the session's first event",
+            "title": "Session S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lap_number",
+          "session_s"
+        ],
+        "title": "ReplayResetEvent",
+        "type": "object"
+      },
       "ReplayResponse": {
         "properties": {
           "failure": {
@@ -689,6 +716,20 @@
         ],
         "title": "ReplaySpeed",
         "type": "integer"
+      },
+      "SeekRequest": {
+        "properties": {
+          "lap_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Lap Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lap_number"
+        ],
+        "title": "SeekRequest",
+        "type": "object"
       },
       "ServerSentEvent": {
         "description": "Represents a single Server-Sent Event.\n\nWhen `yield`ed from a *path operation function* that uses\n`response_class=EventSourceResponse`, each `ServerSentEvent` is encoded\ninto the [SSE wire format](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream)\n(`text/event-stream`).\n\nIf you yield a plain object (dict, Pydantic model, etc.) instead, it is\nautomatically JSON-encoded and sent as the `data:` field.\n\nAll `data` values **including plain strings** are JSON-serialized.\n\nFor example, `data=\"hello\"` produces `data: \"hello\"` on the wire (with\nquotes).",
@@ -779,6 +820,18 @@
             "title": "Drivers",
             "type": "array"
           },
+          "last_lap_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The highest lap number of any driver",
+            "title": "Last Lap Number"
+          },
           "meeting_key": {
             "title": "Meeting Key",
             "type": "integer"
@@ -812,7 +865,8 @@
           "meeting_name",
           "circuit_short_name",
           "country_name",
-          "drivers"
+          "drivers",
+          "last_lap_number"
         ],
         "title": "SessionEntryResponse",
         "type": "object"
@@ -1235,7 +1289,7 @@
     },
     "/api/replays/{replay_id}/events": {
       "get": {
-        "description": "The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each\nevent's SSE `event` is its `kind`; the stream ends with `replay_failed` if the replay\nfails, and when the replay expires.",
+        "description": "The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each\nevent's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events\nrebuild the session from its start; the stream ends with `replay_failed` if the replay\nfails, and when the replay expires.",
         "operationId": "watch_replay_api_replays__replay_id__events_get",
         "parameters": [
           {
@@ -1278,6 +1332,9 @@
                         "anyOf": [
                           {
                             "$ref": "#/components/schemas/ReplayEvent"
+                          },
+                          {
+                            "$ref": "#/components/schemas/ReplayResetEvent"
                           },
                           {
                             "$ref": "#/components/schemas/ReplayFailedEvent"
@@ -1438,6 +1495,80 @@
           }
         },
         "summary": "Resume Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/replays/{replay_id}/seek": {
+      "post": {
+        "description": "Moves the replay to the earliest start of the lap among its drivers, keeping its status\nand speed; the event stream sends `replay_reset`, then the session from its start up to\nthere. 404 when the replay is gone or no driver has a start for the lap, 409 when the\nreplay failed.",
+        "operationId": "seek_replay_api_replays__replay_id__seek_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Replay Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeekRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Seek Replay",
         "tags": [
           "replays"
         ]

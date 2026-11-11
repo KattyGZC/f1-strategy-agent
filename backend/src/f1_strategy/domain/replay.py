@@ -5,7 +5,7 @@ replay's content never depends on how fast or when it is played.
 """
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -71,8 +71,12 @@ class Event:
 
 @dataclass(frozen=True)
 class Timeline:
+    """`lap_starts` holds, by lap number, the earliest instant any driver started that lap; a
+    lap no driver has a start for is missing."""
+
     events: tuple[Event, ...]
     laps_without_instant: int
+    lap_starts: Mapping[int, datetime]
 
 
 _KIND_OF_PAYLOAD: dict[type[EventPayload], EventKind] = {
@@ -122,7 +126,20 @@ def timeline(rows: TimelineRows) -> Timeline:
         *(Event(row.date, row) for row in rows.overtakes),
         *(Event(row.date, row) for row in rows.team_radio),
     ]
-    return Timeline(tuple(sorted(events, key=_order)), len(rows.laps) - len(laps))
+    return Timeline(
+        tuple(sorted(events, key=_order)), len(rows.laps) - len(laps), _lap_starts(rows.laps)
+    )
+
+
+def _lap_starts(laps: Sequence[Lap]) -> dict[int, datetime]:
+    # Every lap with a start counts, completed or not: lap 1 often has a start but no
+    # duration (547 in the 2024 season, psql 2026-11-10).
+    starts: dict[int, datetime] = {}
+    for lap in laps:
+        if lap.date_start is not None:
+            earliest = starts.get(lap.lap_number, lap.date_start)
+            starts[lap.lap_number] = min(earliest, lap.date_start)
+    return starts
 
 
 def _laps_completed(laps: Sequence[Lap], stints: Sequence[Stint]) -> list[Event]:

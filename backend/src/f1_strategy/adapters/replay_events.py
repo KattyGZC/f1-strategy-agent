@@ -19,11 +19,23 @@ class StreamSignal(StrEnum):
     """Stream events that are about the replay itself, not about its session."""
 
     REPLAY_FAILED = "replay_failed"
+    REPLAY_RESET = "replay_reset"
 
 
 class ReplayFailedEvent(BaseModel):
     kind: Literal[StreamSignal.REPLAY_FAILED] = StreamSignal.REPLAY_FAILED
     message: str
+
+
+class ReplayResetEvent(BaseModel):
+    """The replay moved to the start of a lap: what was built is dropped, and the events that
+    follow rebuild the session from its start up to `session_s`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal[StreamSignal.REPLAY_RESET] = StreamSignal.REPLAY_RESET
+    lap_number: int
+    session_s: float = Field(description="Seconds since the session's first event")
 
 
 class _Event(BaseModel):

@@ -33,6 +33,7 @@ def settings(postgres_server_uri: str, redis_server_uri: str) -> ApiSettings:
         replay_idle_ttl_s=60,
         replay_tick_s=0.02,
         replay_lease_s=1,
+        replay_append_batch=2,
     )
 
 

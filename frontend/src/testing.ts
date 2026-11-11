@@ -109,6 +109,11 @@ export const LECLERC: Schemas['DriverResponse'] = {
 export const ENTRY: Schemas['SessionEntryResponse'] = {
   ...SESSION,
   drivers: [VERSTAPPEN, LECLERC],
+  last_lap_number: 57,
+}
+
+export function replayReset(lapNumber: number, sessionS: number): Schemas['ReplayResetEvent'] {
+  return { kind: 'replay_reset', lap_number: lapNumber, session_s: sessionS }
 }
 
 export const REPLAY: Schemas['ReplayResponse'] = {

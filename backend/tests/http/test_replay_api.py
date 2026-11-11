@@ -11,7 +11,7 @@ from f1_strategy.adapters.http.app import create_app
 from f1_strategy.adapters.replay_events import ReplayEvent, wire_event
 from f1_strategy.adapters.replay_store import RedisReplayStore
 from f1_strategy.adapters.settings import ApiSettings
-from tests.http.api import EVENTS, SESSION
+from tests.http.api import EVENTS, LAP_1_S, SESSION
 
 UNKNOWN_SESSION = 9999
 WIRE = TypeAdapter(ReplayEvent)
@@ -135,12 +135,13 @@ def test_a_stopped_replay_is_gone_and_frees_its_place(client: TestClient) -> Non
         ("GET", "/api/replays/missing"),
         ("POST", "/api/replays/missing/pause"),
         ("POST", "/api/replays/missing/resume"),
+        ("POST", "/api/replays/missing/seek"),
         ("DELETE", "/api/replays/missing"),
         ("GET", "/api/replays/missing/events"),
     ],
 )
 def test_an_unknown_replay_is_not_found(client: TestClient, method: str, path: str) -> None:
-    response = client.request(method, path)
+    response = client.request(method, path, json={"lap_number": 1})
 
     assert response.status_code == 404
     assert response.json() == {"detail": "replay missing does not exist or has expired"}
@@ -152,6 +153,7 @@ def test_an_unknown_replay_is_not_found(client: TestClient, method: str, path: s
         ("POST", "/api/replays", {"session_key": SESSION, "speed": 3}, None),
         ("POST", "/api/replays", {"session_key": 0, "speed": 1}, None),
         ("PUT", "/api/replays/abc/speed", {"speed": 7}, None),
+        ("POST", "/api/replays/abc/seek", {"lap_number": 0}, None),
         ("GET", "/api/replays/not$an$id", None, None),
         ("GET", "/api/replays/abc/events", None, {"Last-Event-ID": "latest"}),
     ],
@@ -182,11 +184,14 @@ def test_a_failed_replay_ends_its_stream_with_the_failure(
     asyncio.run(fail())
 
     received = sse_events(client, replay_id, 10)
+    seek = client.post(f"/api/replays/{replay_id}/seek", json={"lap_number": 1})
 
     assert received[-1]["event"] == "replay_failed"
     assert json.loads(received[-1]["data"]) == {"kind": "replay_failed", "message": "boom"}
     assert "id" not in received[-1]
     assert client.get(f"/api/replays/{replay_id}").json()["failure"] == "boom"
+    assert seek.status_code == 409
+    assert seek.json() == {"detail": f"replay {replay_id} failed and cannot move: boom"}
 
 
 def test_the_app_without_its_lifespan_has_no_services() -> None:
@@ -209,3 +214,39 @@ def test_the_production_services_come_from_the_settings(
         response = test_client.post("/api/replays", json={"session_key": SESSION, "speed": 1})
 
     assert response.status_code == 201
+
+
+def test_a_seek_moves_the_replay_and_its_stream_restarts_from_a_reset(
+    client: TestClient,
+) -> None:
+    replay_id = start(client, speed=1)
+    up_to_lap = [event for event in EVENTS if (event.at - EVENTS[0].at).total_seconds() <= LAP_1_S]
+
+    response = client.post(f"/api/replays/{replay_id}/seek", json={"lap_number": 1})
+    received = sse_events(client, replay_id, 1 + len(up_to_lap))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["status"], body["speed"], body["session_s"]) == ("playing", 1, LAP_1_S)
+    reset, *rebuilt = received
+    assert reset == {
+        "event": "replay_reset",
+        "id": "1-0",
+        "data": json.dumps(
+            {"kind": "replay_reset", "lap_number": 1, "session_s": LAP_1_S}, separators=(",", ":")
+        ),
+    }
+    assert [event["id"] for event in rebuilt] == [f"1-{n + 1}" for n in range(len(up_to_lap))]
+    assert [WIRE.validate_json(event["data"]) for event in rebuilt] == [
+        wire_event(event) for event in up_to_lap
+    ]
+
+
+def test_a_lap_no_driver_started_is_not_found(client: TestClient) -> None:
+    replay_id = start(client, speed=1)
+
+    response = client.post(f"/api/replays/{replay_id}/seek", json={"lap_number": 2})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": f"session {SESSION} has no start for lap 2"}
+    assert client.get(f"/api/replays/{replay_id}").json()["status"] == "playing"

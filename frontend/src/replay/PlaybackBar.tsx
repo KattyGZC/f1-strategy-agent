@@ -1,4 +1,5 @@
 import type { ReplaySpeed } from '../api/closedSets.ts'
+import { GoToLap } from './GoToLap.tsx'
 import { SpeedButtons } from './SpeedButtons.tsx'
 import type { Playback } from './usePlayback.ts'
 
@@ -8,6 +9,9 @@ interface Props {
   onPause(): void
   onResume(): void
   onSpeed(speed: ReplaySpeed): void
+  /** `null` when the session has no laps to go to. */
+  lastLapNumber: number | null
+  onSeek(lapNumber: number): void
   onLeave(): void
 }
 
@@ -17,6 +21,8 @@ export function PlaybackBar({
   onPause,
   onResume,
   onSpeed,
+  lastLapNumber,
+  onSeek,
   onLeave,
 }: Readonly<Props>) {
   const playing = playback.status === 'playing'
@@ -37,6 +43,9 @@ export function PlaybackBar({
           ? 'Real time'
           : `1 second here is ${playback.speed} seconds of session`}
       </span>
+      {lastLapNumber === null ? null : (
+        <GoToLap lastLapNumber={lastLapNumber} disabled={busy} onSeek={onSeek} />
+      )}
       <button type="button" className="link" onClick={onLeave}>
         Choose another session
       </button>

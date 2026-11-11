@@ -34,6 +34,7 @@ class SessionDriver:
 class SessionEntry:
     session: LoadedSession
     drivers: tuple[SessionDriver, ...]
+    last_lap_number: int | None
 
 
 class SessionCatalog(Protocol):
@@ -42,7 +43,8 @@ class SessionCatalog(Protocol):
         ...
 
     async def entry(self, session_key: int) -> SessionEntry | None:
-        """The session and its drivers by number, or None if it is not loaded."""
+        """The session, its drivers by number and its highest lap number, or None if it is not
+        loaded."""
         ...
 
 

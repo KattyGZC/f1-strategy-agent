@@ -43,5 +43,9 @@ export function usePlayback(client: ApiClient, replay: ReplayResponse) {
     resume: () => control(() => client.POST('/api/replays/{replay_id}/resume', path)),
     setSpeed: (speed: ReplaySpeed) =>
       control(() => client.PUT('/api/replays/{replay_id}/speed', { ...path, body: { speed } })),
+    seek: (lapNumber: number) =>
+      control(() =>
+        client.POST('/api/replays/{replay_id}/seek', { ...path, body: { lap_number: lapNumber } }),
+      ),
   }
 }

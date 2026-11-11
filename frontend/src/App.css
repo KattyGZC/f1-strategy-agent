@@ -690,3 +690,20 @@ main {
 .playback .link {
   margin-left: auto;
 }
+
+.go-to-lap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.go-to-lap input {
+  width: 5.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel-deep);
+  color: var(--text);
+  font: inherit;
+}

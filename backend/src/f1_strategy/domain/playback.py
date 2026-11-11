@@ -87,9 +87,25 @@ def with_speed(playback: Playback, speed: ReplaySpeed, wall_s: float) -> Playbac
     return Playing(speed, session_s_at(playback, wall_s), wall_s)
 
 
+def sought(playback: Playback, session_s: float, wall_s: float) -> Playback:
+    """The same playback moved to `session_s`: every event up to it is due at once."""
+    if isinstance(playback, Paused):
+        return Paused(playback.speed, session_s)
+    return Playing(playback.speed, session_s, wall_s)
+
+
 def offsets_s(timeline: Timeline) -> tuple[float, ...]:
     """Each event's session time, in timeline order."""
     if not timeline.events:
         return ()
     first = timeline.events[0].at
     return tuple((event.at - first).total_seconds() for event in timeline.events)
+
+
+def lap_start_s(timeline: Timeline, lap_number: int) -> float | None:
+    """The session time at which the earliest driver started the lap; None when no driver has
+    a start for it, or the timeline has no events to measure from."""
+    start = timeline.lap_starts.get(lap_number)
+    if start is None or not timeline.events:
+        return None
+    return (start - timeline.events[0].at).total_seconds()

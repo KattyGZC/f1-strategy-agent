@@ -24,6 +24,7 @@ from f1_strategy.application.replay import (
     ProduceReplay,
     ReplayPolicy,
     ReplayProducers,
+    SeekReplay,
     StartReplay,
     WatchReplay,
 )
@@ -36,6 +37,7 @@ REPLAY_ID_BYTES = 16
 class ApiServices:
     start: StartReplay
     control: ControlReplay
+    seek: SeekReplay
     watch: WatchReplay
     list_sessions: ListSessions
     read_session: ReadSession
@@ -83,7 +85,11 @@ async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
         settings.redis_timeout_s,
     )
     clock = SystemClock()
-    policy = ReplayPolicy(tick_s=settings.replay_tick_s, lease_s=settings.replay_lease_s)
+    policy = ReplayPolicy(
+        tick_s=settings.replay_tick_s,
+        lease_s=settings.replay_lease_s,
+        append_batch=settings.replay_append_batch,
+    )
     rows = PostgresReplayRows(pool)
     catalog = PostgresSessionCatalog(pool)
     store = RedisReplayStore(redis, settings.replay_max_active, settings.replay_idle_ttl_s)
@@ -96,6 +102,7 @@ async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
                 yield ApiServices(
                     start=StartReplay(rows, store, producers, clock, new_replay_id),
                     control=ControlReplay(store, clock),
+                    seek=SeekReplay(rows, store, producers, clock),
                     watch=WatchReplay(store, producers, policy),
                     list_sessions=ListSessions(catalog),
                     read_session=ReadSession(catalog),

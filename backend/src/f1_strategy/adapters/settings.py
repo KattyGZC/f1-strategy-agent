@@ -33,3 +33,4 @@ class ApiSettings(PostgresSettings):
     replay_idle_ttl_s: int = Field(gt=0)
     replay_tick_s: float = Field(gt=0)
     replay_lease_s: float = Field(gt=0)
+    replay_append_batch: int = Field(gt=0)
