@@ -2,6 +2,8 @@
 
 The content of a replay is its session's timeline; pacing only decides when each event is
 appended. What was appended is the progress: a producer that starts again resumes after it.
+A seek starts a new generation of the stream, which the producer fills from the start
+(ADR 0012).
 """
 
 import asyncio
@@ -15,10 +17,12 @@ from f1_strategy.domain.playback import (
     Playback,
     ReplaySpeed,
     due_until,
+    lap_start_s,
     offsets_s,
     paused,
     resumed,
     session_s_at,
+    sought,
     started,
     wall_s_due,
     with_speed,
@@ -32,7 +36,18 @@ class SessionNotLoadedError(LookupError):
 
 
 class ReplayNotFoundError(LookupError):
-    pass
+    def __init__(self, replay_id: str) -> None:
+        super().__init__(f"replay {replay_id} does not exist or has expired")
+
+
+class ReplayFailedError(RuntimeError):
+    def __init__(self, replay_id: str, failure: str) -> None:
+        super().__init__(f"replay {replay_id} failed and cannot move: {failure}")
+
+
+class LapNotFoundError(LookupError):
+    def __init__(self, session_key: int, lap_number: int) -> None:
+        super().__init__(f"session {session_key} has no start for lap {lap_number}")
 
 
 class TooManyReplaysError(RuntimeError):
@@ -41,9 +56,12 @@ class TooManyReplaysError(RuntimeError):
 
 @dataclass(frozen=True)
 class ReplayState:
+    """`generation` counts the seeks; the stream holds the latest generation only."""
+
     session_key: int
     playback: Playback
     failure: str | None = None
+    generation: int = 0
 
 
 @dataclass(frozen=True)
@@ -64,14 +82,30 @@ class StreamEntry:
 
 
 @dataclass(frozen=True)
+class ReplayReset:
+    """The first entry of a generation: a viewer drops what it built and rebuilds from the
+    entries after it, the session from its start up to `session_s`."""
+
+    entry_id: str
+    lap_number: int
+    session_s: float
+
+
+@dataclass(frozen=True)
 class StreamRead:
     state: ReplayState
-    entries: tuple[StreamEntry, ...]
+    entries: tuple[StreamEntry | ReplayReset, ...]
 
 
 @dataclass(frozen=True)
 class ReplayFailure:
     message: str
+
+
+class AppendOutcome(StrEnum):
+    APPENDED = "appended"
+    GONE = "gone"
+    SUPERSEDED = "superseded"
 
 
 class ReplayRows(Protocol):
@@ -94,12 +128,22 @@ class ReplayStore(Protocol):
         """Apply `change` atomically; None when the replay does not exist."""
         ...
 
-    async def sent(self, replay_id: str) -> int:
-        """How many events of the timeline the replay's stream holds."""
+    async def seek(
+        self, replay_id: str, change: Callable[[ReplayState], ReplayState], lap_number: int
+    ) -> ReplayState | None:
+        """Apply `change`, which starts a new generation, and replace the stream with that
+        generation's reset to `lap_number`, in one atomic step; None when the replay does not
+        exist."""
         ...
 
-    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> bool:
-        """False, appending nothing, when the replay is gone."""
+    async def sent(self, replay_id: str) -> int:
+        """How many events of the timeline the stream's latest generation holds."""
+        ...
+
+    async def append(
+        self, replay_id: str, generation: int, first_index: int, events: Sequence[Event]
+    ) -> AppendOutcome:
+        """Appends nothing when the replay is gone or a seek superseded `generation`."""
         ...
 
     async def delete(self, replay_id: str) -> bool:
@@ -129,8 +173,12 @@ class WallClock(Protocol):
 
 @dataclass(frozen=True)
 class ReplayPolicy:
+    """`append_batch` caps the events of one append: Redis runs an append alone, so a seek's
+    catch-up goes in pieces between which every other replay's commands run."""
+
     tick_s: float
     lease_s: float
+    append_batch: int
 
     def __post_init__(self) -> None:
         if not 0 < self.tick_s < self.lease_s:
@@ -138,10 +186,11 @@ class ReplayPolicy:
                 f"tick_s must be positive and shorter than lease_s, got {self.tick_s}"
                 f" and {self.lease_s}"
             )
+        if self.append_batch < 1:
+            raise ValueError(f"append_batch must be at least 1, got {self.append_batch}")
 
 
 class ReplayEnd(StrEnum):
-    FINISHED = "finished"
     EXPIRED = "expired"
     BUSY = "busy"
     LEASE_LOST = "lease_lost"
@@ -156,8 +205,8 @@ class ControlReplay:
     async def status(self, replay_id: str) -> ReplayStatus:
         state = await self._store.state(replay_id)
         if state is None:
-            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
-        return self._status(state, self._clock())
+            raise ReplayNotFoundError(replay_id)
+        return _status(state, self._clock())
 
     async def pause(self, replay_id: str) -> ReplayStatus:
         now = self._clock()
@@ -174,7 +223,7 @@ class ControlReplay:
     async def stop(self, replay_id: str) -> None:
         """Its producer and its viewers end as they would at its expiry."""
         if not await self._store.delete(replay_id):
-            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
+            raise ReplayNotFoundError(replay_id)
 
     async def _change(
         self, replay_id: str, now: float, change: Callable[[Playback], Playback]
@@ -183,17 +232,33 @@ class ControlReplay:
             replay_id, lambda state: replace(state, playback=change(state.playback))
         )
         if state is None:
-            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
-        return self._status(state, now)
+            raise ReplayNotFoundError(replay_id)
+        return _status(state, now)
 
-    @staticmethod
-    def _status(state: ReplayState, now: float) -> ReplayStatus:
-        return ReplayStatus(state, session_s_at(state.playback, now))
+
+def _status(state: ReplayState, now: float) -> ReplayStatus:
+    return ReplayStatus(state, session_s_at(state.playback, now))
+
+
+async def session_timeline(rows: ReplayRows, session_key: int) -> Timeline:
+    loaded = await rows.timeline_rows(session_key)
+    if loaded is None:
+        raise SessionNotLoadedError(session_key)
+    # About 50 ms of CPU for a race's 30,000 events (measured 2026-11-04); a thread keeps
+    # every other replay's stream moving meanwhile.
+    return await asyncio.to_thread(timeline, loaded)
+
+
+@dataclass(frozen=True)
+class _Progress:
+    generation: int
+    sent: int
 
 
 class ProduceReplay:
-    """Appends a replay's events as they fall due, until the timeline ends or the replay is
-    gone. One producer per replay at a time, held by a lease that each tick renews."""
+    """Appends a replay's events as they fall due, until the replay is gone. Past the end of
+    the timeline it keeps ticking, so a seek back always finds a producer. One producer per
+    replay at a time, held by a lease that each tick renews."""
 
     def __init__(
         self,
@@ -223,48 +288,48 @@ class ProduceReplay:
             return ReplayEnd.EXPIRED
         if state.failure is not None:
             return ReplayEnd.FAILED
-        built = await self._timeline(state.session_key)
+        built = await session_timeline(self._rows, state.session_key)
         offsets = offsets_s(built)
-        sent = await self._store.sent(replay_id)
-        while sent < len(built.events):
-            step = await self._tick(replay_id, built.events, offsets, sent)
-            if isinstance(step, ReplayEnd):
-                return step
-            sent = step
-        return ReplayEnd.FINISHED
+        progress: _Progress | ReplayEnd = _Progress(
+            state.generation, await self._store.sent(replay_id)
+        )
+        while isinstance(progress, _Progress):
+            progress = await self._tick(replay_id, built.events, offsets, progress)
+        return progress
 
     async def _tick(
-        self, replay_id: str, events: Sequence[Event], offsets: Sequence[float], sent: int
-    ) -> int | ReplayEnd:
-        """Appends what is due and waits for the next event; how many events are sent now, or
-        why the replay ended."""
+        self, replay_id: str, events: Sequence[Event], offsets: Sequence[float], at: _Progress
+    ) -> _Progress | ReplayEnd:
+        """Appends what is due and waits for the next event; the progress now, or why the
+        replay ended."""
         if not await self._hold(replay_id):
             return ReplayEnd.LEASE_LOST
         state = await self._store.state(replay_id)
         if state is None:
             return ReplayEnd.EXPIRED
+        if state.generation != at.generation:
+            at = _Progress(state.generation, await self._store.sent(replay_id))
         now = self._clock()
+        sent = at.sent
         due = due_until(state.playback, offsets, sent, now)
-        if due > sent:
-            if not await self._store.append(replay_id, sent, events[sent:due]):
+        batch_end = min(due, sent + self._policy.append_batch)
+        if batch_end > sent:
+            outcome = await self._store.append(
+                replay_id, at.generation, sent, events[sent:batch_end]
+            )
+            if outcome is AppendOutcome.GONE:
                 return ReplayEnd.EXPIRED
-            sent = due
-        if sent < len(events):
-            await self._clock.sleep(self._wait_s(state.playback, offsets[sent], now))
-        return sent
+            if outcome is AppendOutcome.APPENDED:
+                sent = batch_end
+        wait_s = 0.0 if due > sent else self._wait_s(state.playback, offsets[sent:], now)
+        await self._clock.sleep(wait_s)
+        return _Progress(at.generation, sent)
 
-    async def _timeline(self, session_key: int) -> Timeline:
-        rows = await self._rows.timeline_rows(session_key)
-        if rows is None:
-            raise SessionNotLoadedError(session_key)
-        # About 50 ms of CPU for a race's 30,000 events (measured 2026-11-04); a thread keeps
-        # every other replay's stream moving meanwhile.
-        return await asyncio.to_thread(timeline, rows)
-
-    def _wait_s(self, playback: Playback, next_session_s: float, now: float) -> float:
-        if isinstance(playback, Paused):
+    def _wait_s(self, playback: Playback, unsent_offsets: Sequence[float], now: float) -> float:
+        if isinstance(playback, Paused) or not unsent_offsets:
             return self._policy.tick_s
-        return min(self._policy.tick_s, max(0.0, wall_s_due(playback, next_session_s) - now))
+        next_due_s = wall_s_due(playback, unsent_offsets[0])
+        return min(self._policy.tick_s, max(0.0, next_due_s - now))
 
     async def _hold(self, replay_id: str) -> bool:
         return await self._store.hold_lease(replay_id, self._owner, self._policy.lease_s)
@@ -329,6 +394,45 @@ class StartReplay:
         return replay_id
 
 
+class SeekReplay:
+    """Moves a replay to the earliest start of a lap; its viewers rebuild from a reset."""
+
+    def __init__(
+        self, rows: ReplayRows, store: ReplayStore, producers: ReplayProducers, clock: WallClock
+    ) -> None:
+        self._rows = rows
+        self._store = store
+        self._producers = producers
+        self._clock = clock
+
+    async def __call__(self, replay_id: str, lap_number: int) -> ReplayStatus:
+        state = await self._store.state(replay_id)
+        if state is None:
+            raise ReplayNotFoundError(replay_id)
+        session_s = lap_start_s(await session_timeline(self._rows, state.session_key), lap_number)
+        if session_s is None:
+            raise LapNotFoundError(state.session_key, lap_number)
+        now = self._clock()
+        changed = await self._store.seek(
+            replay_id, lambda state: _sought(replay_id, state, session_s, now), lap_number
+        )
+        if changed is None:
+            raise ReplayNotFoundError(replay_id)
+        # A producer that died with its process resumes here, as it does for a watch.
+        self._producers.ensure(replay_id)
+        return _status(changed, now)
+
+
+def _sought(replay_id: str, state: ReplayState, session_s: float, now: float) -> ReplayState:
+    # Checked on the state the seek's own transaction read, so a failure recorded meanwhile
+    # is not sought.
+    if state.failure is not None:
+        raise ReplayFailedError(replay_id, state.failure)
+    return replace(
+        state, generation=state.generation + 1, playback=sought(state.playback, session_s, now)
+    )
+
+
 class WatchReplay:
     """A viewer's read of a replay: from where the viewer stopped, until the replay is gone."""
 
@@ -341,16 +445,16 @@ class WatchReplay:
 
     async def __call__(
         self, replay_id: str, after: str | None
-    ) -> AsyncIterator[StreamEntry | ReplayFailure]:
+    ) -> AsyncIterator[StreamEntry | ReplayReset | ReplayFailure]:
         if await self._store.state(replay_id) is None:
-            raise ReplayNotFoundError(f"replay {replay_id} does not exist or has expired")
+            raise ReplayNotFoundError(replay_id)
         # A producer that died with its process resumes as soon as someone watches.
         self._producers.ensure(replay_id)
         return self._entries(replay_id, after)
 
     async def _entries(
         self, replay_id: str, after: str | None
-    ) -> AsyncIterator[StreamEntry | ReplayFailure]:
+    ) -> AsyncIterator[StreamEntry | ReplayReset | ReplayFailure]:
         while (read := await self._store.read(replay_id, after, self._block_s)) is not None:
             for entry in read.entries:
                 yield entry
