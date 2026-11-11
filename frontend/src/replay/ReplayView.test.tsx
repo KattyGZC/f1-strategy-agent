@@ -16,6 +16,7 @@ import {
   position,
   raceControl,
   REPLAY,
+  replayReset,
   WEATHER,
   type FakeEventStream,
   type Route,
@@ -27,9 +28,10 @@ const CONTROLS: Record<string, Route> = {
   'POST /api/replays/replay-1/resume': () => json(REPLAY),
   'PUT /api/replays/replay-1/speed': async (request) =>
     json({ ...REPLAY, speed: ((await request.json()) as { speed: number }).speed }),
+  'POST /api/replays/replay-1/seek': () => json({ ...REPLAY, session_s: 5_400 }),
 }
 
-function renderView(routes: Record<string, Route> = CONTROLS, onLeave = () => {}) {
+function renderView(routes: Record<string, Route> = CONTROLS, onLeave = () => {}, entry = ENTRY) {
   const api = fakeApi(routes)
   const streams = fakeStreams()
   const view = render(
@@ -37,7 +39,7 @@ function renderView(routes: Record<string, Route> = CONTROLS, onLeave = () => {}
       client={createApiClient(API_ORIGIN, api.fetchImpl)}
       openStream={streams.open}
       replay={REPLAY}
-      entry={ENTRY}
+      entry={entry}
       onLeave={onLeave}
     />,
   )
@@ -310,5 +312,81 @@ describe('ReplayView', () => {
     unmount()
 
     expect(stream.readyState).toBe(CLOSED)
+  })
+
+  it('goes to a lap through the API and rebuilds the screen from the reset', async () => {
+    const { stream, requests } = renderView()
+    await emit(stream, position(1, 2), position(16, 1))
+
+    fireEvent.change(screen.getByLabelText('Lap'), { target: { value: '30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Go to lap' }))
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    await emit(stream, replayReset(30, 5_400), position(1, 1))
+
+    const [request] = requests
+    expect(`${request?.method} ${new URL(request?.url ?? '').pathname}`).toBe(
+      'POST /api/replays/replay-1/seek',
+    )
+    expect(await request?.json()).toEqual({ lap_number: 30 })
+    expect(towerCells()).toEqual([
+      ['1', 'VER', '-', '-', '-', '-'],
+      ['-', 'LEC', '-', '-', '-', '-'],
+    ])
+  })
+
+  it.each(['', '0', '58', '2.5', '-3'])('offers no lap for %j', (typed) => {
+    renderView()
+
+    fireEvent.change(screen.getByLabelText('Lap'), { target: { value: typed } })
+
+    expect(screen.getByRole('button', { name: 'Go to lap' })).toBeDisabled()
+  })
+
+  it('offers the first and the last lap of the session', () => {
+    renderView()
+    const lapField = screen.getByLabelText('Lap')
+
+    fireEvent.change(lapField, { target: { value: '1' } })
+    const first = screen.getByRole('button', { name: 'Go to lap' })
+    expect(first).toBeEnabled()
+    fireEvent.change(lapField, { target: { value: '57' } })
+
+    expect(screen.getByRole('button', { name: 'Go to lap' })).toBeEnabled()
+    expect(lapField).toHaveAttribute('max', '57')
+  })
+
+  it('sends a lap on Enter, and nothing for a lap out of range', async () => {
+    const { requests } = renderView()
+    const lapField = screen.getByLabelText('Lap')
+
+    fireEvent.change(lapField, { target: { value: '99' } })
+    fireEvent.submit(lapField)
+    fireEvent.change(lapField, { target: { value: '12' } })
+    fireEvent.submit(lapField)
+
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    expect(await requests[0]?.json()).toEqual({ lap_number: 12 })
+  })
+
+  it('shows no lap to go to in a session without laps', () => {
+    renderView(CONTROLS, () => {}, { ...ENTRY, last_lap_number: null })
+
+    expect(screen.queryByLabelText('Lap')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Go to lap' })).not.toBeInTheDocument()
+  })
+
+  it('says why a seek failed', async () => {
+    renderView({
+      ...CONTROLS,
+      'POST /api/replays/replay-1/seek': () =>
+        json({ detail: 'session 9472 has no start for lap 30' }, 404),
+    })
+
+    fireEvent.change(screen.getByLabelText('Lap'), { target: { value: '30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Go to lap' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The replay did not change: session 9472 has no start for lap 30',
+    )
   })
 })

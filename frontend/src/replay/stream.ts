@@ -1,13 +1,15 @@
 import { EVENT_KINDS } from '../api/closedSets.ts'
 import type { components, paths } from '../api/schema.ts'
-import type { ReplayEvent } from './fold.ts'
+import type { EventBatch, ReplayEvent } from './fold.ts'
 
 type ReplayFailedEvent = components['schemas']['ReplayFailedEvent']
-type StreamEvent = ReplayEvent | ReplayFailedEvent
+type ReplayResetEvent = components['schemas']['ReplayResetEvent']
+type StreamEvent = ReplayEvent | ReplayFailedEvent | ReplayResetEvent
 type Received = { kind: 'event'; event: StreamEvent } | { kind: 'invalid'; reason: string }
 
 const EVENTS_PATH = '/api/replays/{replay_id}/events' satisfies keyof paths
 const REPLAY_FAILED: ReplayFailedEvent['kind'] = 'replay_failed'
+const REPLAY_RESET: ReplayResetEvent['kind'] = 'replay_reset'
 /** `EventSource.CLOSED`, which jsdom does not define: the browser gave up reconnecting. */
 const CLOSED = 2
 
@@ -32,8 +34,9 @@ export const CONNECTING: StreamLink = { kind: 'connecting' }
 const LIVE: StreamLink = { kind: 'live' }
 
 export interface StreamHandlers {
-  /** The events that arrived since the last call, in the order they arrived. */
-  onEvents(events: readonly ReplayEvent[]): void
+  /** What arrived since the last call: the events in the order they arrived, after a reset
+   * when a seek dropped what came before (ADR 0012). */
+  onBatch(batch: EventBatch): void
   onLink(link: StreamLink): void
 }
 
@@ -45,6 +48,46 @@ const nextFrame: ScheduleFlush = (flush) => {
   requestAnimationFrame(flush)
 }
 
+/** Collects what arrives and hands it over once per scheduled flush; a reset drops what is
+ * not handed over yet, since a seek replaced it (ADR 0012). */
+function frameBatcher(handlers: StreamHandlers, schedule: ScheduleFlush) {
+  let pending: ReplayEvent[] = []
+  let resetPending = false
+  let scheduled = false
+  let open = true
+  const flush = () => {
+    scheduled = false
+    if (open && (resetPending || pending.length > 0)) {
+      const batch = { reset: resetPending, events: pending }
+      pending = []
+      resetPending = false
+      handlers.onLink(LIVE)
+      handlers.onBatch(batch)
+    }
+  }
+  const queue = () => {
+    if (!scheduled) {
+      scheduled = true
+      schedule(flush)
+    }
+  }
+  return {
+    push(event: ReplayEvent) {
+      pending.push(event)
+      queue()
+    },
+    reset() {
+      pending = []
+      resetPending = true
+      queue()
+    },
+    flush,
+    close() {
+      open = false
+    },
+  }
+}
+
 /** Watches a replay's events until the returned function is called. The browser reconnects
  * on its own and resumes after the last event it received (ADR 0009). */
 export function watchReplay(
@@ -54,19 +97,10 @@ export function watchReplay(
   schedule: ScheduleFlush = nextFrame,
 ): () => void {
   const stream = open(EVENTS_PATH.replace('{replay_id}', encodeURIComponent(replayId)))
-  let pending: ReplayEvent[] = []
-  let watching = true
-  const flush = () => {
-    if (watching && pending.length > 0) {
-      const batch = pending
-      pending = []
-      handlers.onLink(LIVE)
-      handlers.onEvents(batch)
-    }
-  }
+  const batcher = frameBatcher(handlers, schedule)
   const fail = (message: string) => {
     stream.close()
-    flush()
+    batcher.flush()
     handlers.onLink({ kind: 'failed', message })
   }
   const receive = (message: Event) => {
@@ -80,12 +114,13 @@ export function watchReplay(
       fail(event.message)
       return
     }
-    pending.push(event)
-    if (pending.length === 1) {
-      schedule(flush)
+    if (event.kind === REPLAY_RESET) {
+      batcher.reset()
+    } else {
+      batcher.push(event)
     }
   }
-  for (const kind of [...EVENT_KINDS, REPLAY_FAILED]) {
+  for (const kind of [...EVENT_KINDS, REPLAY_FAILED, REPLAY_RESET]) {
     stream.addEventListener(kind, receive)
   }
   stream.addEventListener('open', () => handlers.onLink(LIVE))
@@ -93,7 +128,7 @@ export function watchReplay(
     handlers.onLink({ kind: stream.readyState === CLOSED ? 'ended' : 'reconnecting' })
   })
   return () => {
-    watching = false
+    batcher.close()
     stream.close()
   }
 }

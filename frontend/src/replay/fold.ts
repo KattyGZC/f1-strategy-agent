@@ -8,6 +8,12 @@ export type LapEvent = Schemas['LapEvent']
 export type Flag = Schemas['Flag']
 export type SessionDriver = Schemas['DriverResponse']
 
+/** Events handed over together; after a reset they rebuild the replay from nothing. */
+export interface EventBatch {
+  readonly reset: boolean
+  readonly events: readonly ReplayEvent[]
+}
+
 export type Gap = { unit: 'seconds'; value: number } | { unit: 'laps'; value: number }
 
 export interface DriverTiming {
@@ -80,8 +86,12 @@ export function foldEvent(state: ReplayState, event: ReplayEvent): ReplayState {
   }
 }
 
-export function foldEvents(state: ReplayState, events: readonly ReplayEvent[]): ReplayState {
+function foldEvents(state: ReplayState, events: readonly ReplayEvent[]): ReplayState {
   return events.reduce(foldEvent, state)
+}
+
+export function foldBatch(state: ReplayState, batch: EventBatch): ReplayState {
+  return foldEvents(batch.reset ? EMPTY_REPLAY : state, batch.events)
 }
 
 /** The session's drivers by the position they last held; a driver with none yet goes last.

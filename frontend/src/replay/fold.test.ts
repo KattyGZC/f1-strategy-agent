@@ -15,6 +15,7 @@ import {
 } from '../testing.ts'
 import {
   EMPTY_REPLAY,
+  foldBatch,
   foldEvent,
   NO_TIMING,
   towerRows,
@@ -151,5 +152,31 @@ describe('towerRows', () => {
       { driver: VERSTAPPEN, timing: NO_TIMING },
       { driver: LECLERC, timing: NO_TIMING },
     ])
+  })
+})
+
+describe('foldBatch', () => {
+  it('folds a plain batch onto what was built', () => {
+    const built = fold(position(1, 1))
+
+    const state = foldBatch(built, { reset: false, events: [position(16, 2)] })
+
+    expect(state).toEqual(fold(position(1, 1), position(16, 2)))
+  })
+
+  it('rebuilds from nothing after a reset', () => {
+    const built = fold(
+      position(1, 1),
+      WEATHER,
+      raceControl(1, 'YELLOW IN TRACK', { scope: 'Track', flag: 'YELLOW' }),
+    )
+
+    const state = foldBatch(built, { reset: true, events: [position(16, 2)] })
+
+    expect(state).toEqual(fold(position(16, 2)))
+  })
+
+  it('leaves nothing after a reset alone', () => {
+    expect(foldBatch(fold(position(1, 1)), { reset: true, events: [] })).toBe(EMPTY_REPLAY)
   })
 })

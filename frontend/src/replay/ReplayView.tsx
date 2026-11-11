@@ -3,7 +3,7 @@ import { useEffect, useReducer, useState } from 'react'
 import type { ApiClient } from '../api/client.ts'
 import type { components } from '../api/schema.ts'
 import { DriverCard } from './DriverCard.tsx'
-import { EMPTY_REPLAY, foldEvents, towerRows } from './fold.ts'
+import { EMPTY_REPLAY, foldBatch, towerRows } from './fold.ts'
 import { PlaybackBar } from './PlaybackBar.tsx'
 import { RaceHeader } from './RaceHeader.tsx'
 import { CircuitCard, RaceControlFeed, StrategyPanel, WeatherPanel } from './SidePanels.tsx'
@@ -22,14 +22,14 @@ interface Props {
 }
 
 export function ReplayView({ client, openStream, replay, entry, onLeave }: Readonly<Props>) {
-  const [state, dispatch] = useReducer(foldEvents, EMPTY_REPLAY)
+  const [state, dispatch] = useReducer(foldBatch, EMPTY_REPLAY)
   const [link, setLink] = useState<StreamLink>(CONNECTING)
   const [selected, setSelected] = useState<number | null>(null)
   const controls = usePlayback(client, replay)
   const replayId = replay.replay_id
 
   useEffect(
-    () => watchReplay(openStream, replayId, { onEvents: dispatch, onLink: setLink }),
+    () => watchReplay(openStream, replayId, { onBatch: dispatch, onLink: setLink }),
     [openStream, replayId],
   )
 
@@ -77,6 +77,8 @@ export function ReplayView({ client, openStream, replay, entry, onLeave }: Reado
         onPause={controls.pause}
         onResume={controls.resume}
         onSpeed={controls.setSpeed}
+        lastLapNumber={entry.last_lap_number}
+        onSeek={controls.seek}
         onLeave={onLeave}
       />
     </section>
