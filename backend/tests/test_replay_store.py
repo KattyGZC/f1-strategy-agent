@@ -10,7 +10,7 @@ from redis.exceptions import ResponseError
 
 from f1_strategy.adapters.replay_events import wire_event
 from f1_strategy.adapters.replay_store import RedisReplayStore
-from f1_strategy.application.replay import ReplayState, StreamEntry
+from f1_strategy.application.replay import AppendOutcome, ReplayReset, ReplayState, StreamEntry
 from f1_strategy.domain.clean import clean_session
 from f1_strategy.domain.playback import Paused, Playing, ReplaySpeed
 from f1_strategy.domain.replay import Event, timeline
@@ -40,10 +40,20 @@ def appending(mark: str) -> Callable[[ReplayState], ReplayState]:
     return lambda state: replace(state, failure=f"{state.failure}{mark}")
 
 
-def entries_of(events: tuple[Event, ...], first: int = 0) -> tuple[StreamEntry, ...]:
+def entries_of(
+    events: tuple[Event, ...], first: int = 0, generation: int = 0
+) -> tuple[StreamEntry, ...]:
     return tuple(
-        StreamEntry(f"0-{first + index + 1}", event.kind, wire_event(event).model_dump_json())
+        StreamEntry(
+            f"{generation}-{first + index + 1}", event.kind, wire_event(event).model_dump_json()
+        )
         for index, event in enumerate(events)
+    )
+
+
+def sought(generation: int, session_s: float) -> Callable[[ReplayState], ReplayState]:
+    return lambda state: replace(
+        state, generation=generation, playback=Paused(ReplaySpeed.X10, session_s)
     )
 
 
@@ -53,6 +63,7 @@ def entries_of(events: tuple[Event, ...], first: int = 0) -> tuple[StreamEntry, 
         PLAYING,
         ReplayState(9468, Paused(ReplaySpeed.X1, 0.0)),
         ReplayState(9472, Paused(ReplaySpeed.X60, 3.75), "SessionNotLoadedError: gone"),
+        ReplayState(9472, Paused(ReplaySpeed.X5, 600.0), generation=3),
     ],
 )
 async def test_a_created_replay_reads_back_its_state(redis: Redis, state: ReplayState) -> None:
@@ -90,7 +101,7 @@ async def test_simultaneous_creates_never_pass_the_limit(redis: Redis) -> None:
 async def test_an_idle_replay_expires_and_frees_its_place(redis: Redis) -> None:
     replays = store(redis, max_active=1, idle_ttl_s=1)
     await replays.create(REPLAY, PLAYING)
-    await replays.append(REPLAY, 0, EVENTS[:1])
+    await replays.append(REPLAY, 0, 0, EVENTS[:1])
 
     await asyncio.sleep(1.2)
 
@@ -102,7 +113,7 @@ async def test_an_idle_replay_expires_and_frees_its_place(redis: Redis) -> None:
 async def test_a_read_keeps_a_watched_replay_alive(redis: Redis) -> None:
     replays = store(redis, max_active=1, idle_ttl_s=1)
     await replays.create(REPLAY, PLAYING)
-    await replays.append(REPLAY, 0, EVENTS[:1])
+    await replays.append(REPLAY, 0, 0, EVENTS[:1])
 
     for _ in range(4):
         await asyncio.sleep(0.4)
@@ -142,8 +153,8 @@ async def test_updating_an_unknown_replay_changes_nothing(redis: Redis) -> None:
 async def test_appended_events_read_back_in_order_with_their_ids(redis: Redis) -> None:
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
-    await replays.append(REPLAY, 0, EVENTS[:2])
-    await replays.append(REPLAY, 2, EVENTS[2:])
+    await replays.append(REPLAY, 0, 0, EVENTS[:2])
+    await replays.append(REPLAY, 0, 2, EVENTS[2:])
 
     read = await replays.read(REPLAY, None, BLOCK_S)
 
@@ -151,13 +162,15 @@ async def test_appended_events_read_back_in_order_with_their_ids(redis: Redis) -
     assert read.state == PLAYING
     assert read.entries == entries_of(EVENTS)
     assert await replays.sent(REPLAY) == len(EVENTS)
-    assert json.loads(read.entries[0].data)["kind"] == EVENTS[0].kind
+    first = read.entries[0]
+    assert isinstance(first, StreamEntry)
+    assert json.loads(first.data)["kind"] == EVENTS[0].kind
 
 
 async def test_a_read_after_an_id_returns_only_later_entries(redis: Redis) -> None:
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
-    await replays.append(REPLAY, 0, EVENTS)
+    await replays.append(REPLAY, 0, 0, EVENTS)
 
     read = await replays.read(REPLAY, "0-3", BLOCK_S)
 
@@ -181,7 +194,7 @@ async def test_a_read_returns_an_entry_appended_while_it_waits(redis: Redis) -> 
     reading = asyncio.create_task(replays.read(REPLAY, None, 5.0))
     await asyncio.sleep(0.1)
 
-    await replays.append(REPLAY, 0, EVENTS[:1])
+    await replays.append(REPLAY, 0, 0, EVENTS[:1])
 
     read = await asyncio.wait_for(reading, timeout=2.0)
     assert read is not None
@@ -194,16 +207,16 @@ async def test_an_append_that_does_not_continue_the_stream_is_refused(
 ) -> None:
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
-    await replays.append(REPLAY, 0, EVENTS[:1])
+    await replays.append(REPLAY, 0, 0, EVENTS[:1])
 
-    with pytest.raises(ResponseError, match="the stream holds 1 events"):
-        await replays.append(REPLAY, first_index, EVENTS[1:2])
+    with pytest.raises(ResponseError, match=f"the stream holds 0-1, not 0-{first_index}"):
+        await replays.append(REPLAY, 0, first_index, EVENTS[1:2])
 
     assert await replays.sent(REPLAY) == 1
 
 
 async def test_an_append_to_a_gone_replay_appends_nothing(redis: Redis) -> None:
-    assert await store(redis).append("missing", 0, EVENTS[:1]) is False
+    assert await store(redis).append("missing", 0, 0, EVENTS[:1]) is AppendOutcome.GONE
 
     assert await redis.exists("replay:missing:events") == 0
 
@@ -212,13 +225,13 @@ async def test_an_append_reports_that_it_appended(redis: Redis) -> None:
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
 
-    assert await replays.append(REPLAY, 0, EVENTS[:1]) is True
+    assert await replays.append(REPLAY, 0, 0, EVENTS[:1]) is AppendOutcome.APPENDED
 
 
 async def test_deleting_a_replay_removes_it_and_frees_its_place(redis: Redis) -> None:
     replays = store(redis, max_active=1)
     await replays.create(REPLAY, PLAYING)
-    await replays.append(REPLAY, 0, EVENTS[:2])
+    await replays.append(REPLAY, 0, 0, EVENTS[:2])
     await replays.hold_lease(REPLAY, "owner", 60)
 
     deleted = await replays.delete(REPLAY)
@@ -280,3 +293,100 @@ async def test_an_update_that_keeps_losing_the_race_gives_up(
 
     rival.close()
     assert await replays.state(REPLAY) == PLAYING
+
+
+async def test_a_seek_replaces_the_stream_with_its_reset_and_keeps_the_expiry(
+    redis: Redis,
+) -> None:
+    replays = store(redis, idle_ttl_s=60)
+    await replays.create(REPLAY, PLAYING)
+    await replays.append(REPLAY, 0, 0, EVENTS)
+
+    changed = await replays.seek(REPLAY, sought(1, 95.0), 3)
+
+    assert changed == ReplayState(9472, Paused(ReplaySpeed.X10, 95.0), generation=1)
+    assert await replays.state(REPLAY) == changed
+    assert await replays.sent(REPLAY) == 0
+    assert await redis.xlen(f"replay:{REPLAY}:events") == 1
+    assert 0 < await redis.pttl(f"replay:{REPLAY}:events") <= 60_000
+    read = await replays.read(REPLAY, None, BLOCK_S)
+    assert read is not None
+    assert read.entries == (ReplayReset("1-0", 3, 95.0),)
+
+
+async def test_a_new_generation_appends_after_its_reset(redis: Redis) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+    await replays.append(REPLAY, 0, 0, EVENTS[:2])
+    await replays.seek(REPLAY, sought(1, 95.0), 3)
+
+    outcome = await replays.append(REPLAY, 1, 0, EVENTS[:3])
+    read = await replays.read(REPLAY, "0-2", BLOCK_S)
+
+    assert outcome is AppendOutcome.APPENDED
+    assert await replays.sent(REPLAY) == 3
+    assert read is not None
+    assert read.entries == (ReplayReset("1-0", 3, 95.0), *entries_of(EVENTS[:3], generation=1))
+
+
+async def test_an_append_of_a_generation_a_seek_replaced_appends_nothing(redis: Redis) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+    await replays.append(REPLAY, 0, 0, EVENTS[:2])
+    await replays.seek(REPLAY, sought(1, 95.0), 3)
+
+    outcome = await replays.append(REPLAY, 0, 2, EVENTS[2:])
+
+    assert outcome is AppendOutcome.SUPERSEDED
+    assert await redis.xlen(f"replay:{REPLAY}:events") == 1
+
+
+async def test_a_second_seek_drops_the_first_generation(redis: Redis) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+    await replays.seek(REPLAY, sought(1, 95.0), 3)
+    await replays.append(REPLAY, 1, 0, EVENTS)
+
+    await replays.seek(REPLAY, sought(2, 10.0), 1)
+    read = await replays.read(REPLAY, None, BLOCK_S)
+
+    assert read is not None
+    assert read.entries == (ReplayReset("2-0", 1, 10.0),)
+
+
+async def test_a_reader_waiting_through_a_seek_receives_the_reset(redis: Redis) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+    await replays.append(REPLAY, 0, 0, EVENTS[:2])
+    reading = asyncio.create_task(replays.read(REPLAY, "0-2", 5.0))
+    await asyncio.sleep(0.1)
+
+    await replays.seek(REPLAY, sought(1, 95.0), 3)
+
+    read = await asyncio.wait_for(reading, timeout=2.0)
+    assert read is not None
+    assert read.entries == (ReplayReset("1-0", 3, 95.0),)
+
+
+async def test_seeking_an_unknown_replay_changes_nothing(redis: Redis) -> None:
+    assert await store(redis).seek("missing", sought(1, 95.0), 3) is None
+    assert await redis.keys("replay:missing:*") == []
+
+
+async def test_a_seek_that_keeps_losing_the_race_gives_up(
+    redis: Redis, redis_server_uri: str
+) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+    rival = sync_redis.Redis.from_url(redis_server_uri)
+
+    def change_raced_by_another_writer(state: ReplayState) -> ReplayState:
+        rival.set(f"replay:{REPLAY}:state", rival.get(f"replay:{REPLAY}:state") or b"")
+        return sought(1, 95.0)(state)
+
+    with pytest.raises(RuntimeError, match="changed 5 times while sought"):
+        await replays.seek(REPLAY, change_raced_by_another_writer, 3)
+
+    rival.close()
+    assert await replays.state(REPLAY) == PLAYING
+    assert await redis.exists(f"replay:{REPLAY}:events") == 0

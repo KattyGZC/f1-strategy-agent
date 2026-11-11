@@ -1,8 +1,12 @@
 """Replays in Redis: each replay's state, its stream of events and its producer lease (ADR 0009).
 
 Every step that must not interleave with another runs as one Lua script, which Redis runs
-atomically. Expiry is measured from the last read of a viewer: a replay nobody watches for
-`idle_ttl_s` disappears with its stream.
+atomically, or as one WATCH transaction when Python computes the new state. Expiry is measured
+from the last read of a viewer: a replay nobody watches for `idle_ttl_s` disappears with its
+stream.
+
+Entry ids are `<generation>-<n>`: a seek replaces the stream with its reset, `<generation>-0`,
+and event n of the timeline follows as `<generation>-<n>` (ADR 0012).
 """
 
 from collections.abc import Callable, Sequence
@@ -14,8 +18,14 @@ from redis.asyncio import BlockingConnectionPool, Redis
 from redis.asyncio.client import Pipeline
 from redis.exceptions import WatchError
 
-from f1_strategy.adapters.replay_events import wire_event
-from f1_strategy.application.replay import ReplayState, StreamEntry, StreamRead
+from f1_strategy.adapters.replay_events import ReplayResetEvent, StreamSignal, wire_event
+from f1_strategy.application.replay import (
+    AppendOutcome,
+    ReplayReset,
+    ReplayState,
+    StreamEntry,
+    StreamRead,
+)
 from f1_strategy.domain.playback import Paused, Playback, PlaybackStatus, Playing, ReplaySpeed
 from f1_strategy.domain.replay import Event, EventKind
 
@@ -25,8 +35,9 @@ ACTIVE_KEY = "replays:active"
 # leave room for it; past that the update fails loud.
 UPDATE_ATTEMPTS = 5
 MILLISECONDS_PER_S = 1000
-# What APPEND returns, appending nothing, for a replay that is gone.
+# What APPEND returns, appending nothing, for a replay that is gone or a superseded generation.
 GONE = -1
+SUPERSEDED = -2
 
 # Drops replays whose idle time ran out, then adds this one unless the limit is reached.
 # Time comes from the Redis server, so every backend process measures the same expiry.
@@ -42,24 +53,54 @@ redis.call('SET', KEYS[2], ARGV[4], 'PX', ARGV[2])
 return 1
 """
 
-# Appends only right after the last entry, so a producer that resumes, or two that briefly
-# overlap, can neither leave a gap nor send an event twice.
-APPEND = """
+# The generation and the number of timeline events of the stream's last entry; 0, 0 for an
+# empty stream.
+LAST_ENTRY = """
+local function last_entry(key)
+    local last = redis.call('XREVRANGE', key, '+', '-', 'COUNT', 1)
+    if #last == 0 then
+        return 0, 0
+    end
+    local generation, held = string.match(last[1][1], '^(%d+)-(%d+)$')
+    return tonumber(generation), tonumber(held)
+end
+"""
+
+# Appends only right after the last entry of its own generation, so a producer that resumes,
+# or two that briefly overlap, can neither leave a gap nor send an event twice, and nothing of
+# a generation a seek replaced reaches the new one.
+APPEND = (
+    LAST_ENTRY
+    + f"""
 local ttl = redis.call('PTTL', KEYS[1])
 if ttl < 0 then
-    return -1
+    return {GONE}
 end
-local held = redis.call('XLEN', KEYS[2])
-if held ~= tonumber(ARGV[1]) then
-    return redis.error_reply('the stream holds ' .. held .. ' events, not ' .. ARGV[1])
+local generation = tonumber(ARGV[1])
+local held_generation, held = last_entry(KEYS[2])
+if held_generation > generation then
+    return {SUPERSEDED}
 end
-for i = 2, #ARGV, 2 do
+if held_generation ~= generation or held ~= tonumber(ARGV[2]) then
+    return redis.error_reply('the stream holds ' .. held_generation .. '-' .. held
+        .. ', not ' .. generation .. '-' .. ARGV[2])
+end
+for i = 3, #ARGV, 2 do
     held = held + 1
-    redis.call('XADD', KEYS[2], '0-' .. held, 'kind', ARGV[i], 'data', ARGV[i + 1])
+    redis.call('XADD', KEYS[2], generation .. '-' .. held, 'kind', ARGV[i], 'data', ARGV[i + 1])
 end
 redis.call('PEXPIRE', KEYS[2], ttl)
 return held
 """
+)
+
+SENT = (
+    LAST_ENTRY
+    + """
+local _, held = last_entry(KEYS[1])
+return held
+"""
+)
 
 # A viewer's read pushes the replay's expiry back and returns its state, in one step so the
 # replay cannot expire in between; nil when it is already gone.
@@ -122,6 +163,7 @@ class _StoredState(BaseModel):
     session_key: int
     playback: Annotated[_StoredPlaying | _StoredPaused, Field(discriminator="status")]
     failure: str | None
+    generation: int
 
 
 def redis_client(uri: str, max_connections: int, timeout_s: float) -> Redis:
@@ -140,6 +182,7 @@ class RedisReplayStore:
         self._idle_ttl_ms = idle_ttl_s * MILLISECONDS_PER_S
         self._create = redis.register_script(CREATE)
         self._append = redis.register_script(APPEND)
+        self._sent = redis.register_script(SENT)
         self._delete = redis.register_script(DELETE)
         self._touch = redis.register_script(TOUCH)
         self._hold_lease = redis.register_script(HOLD_LEASE)
@@ -166,17 +209,32 @@ class RedisReplayStore:
                     return await _change_once(pipe, key, change)
         raise RuntimeError(f"replay {replay_id} changed {UPDATE_ATTEMPTS} times while updated")
 
-    async def sent(self, replay_id: str) -> int:
-        return int(await self._redis.xlen(_events_key(replay_id)))
+    async def seek(
+        self, replay_id: str, change: Callable[[ReplayState], ReplayState], lap_number: int
+    ) -> ReplayState | None:
+        async with self._redis.pipeline(transaction=True) as pipe:
+            for _ in range(UPDATE_ATTEMPTS):
+                with suppress(WatchError):
+                    return await _seek_once(pipe, replay_id, change, lap_number)
+        raise RuntimeError(f"replay {replay_id} changed {UPDATE_ATTEMPTS} times while sought")
 
-    async def append(self, replay_id: str, first_index: int, events: Sequence[Event]) -> bool:
-        encoded: list[str | int] = [first_index]
+    async def sent(self, replay_id: str) -> int:
+        return int(await self._sent(keys=[_events_key(replay_id)]))
+
+    async def append(
+        self, replay_id: str, generation: int, first_index: int, events: Sequence[Event]
+    ) -> AppendOutcome:
+        encoded: list[str | int] = [generation, first_index]
         for event in events:
             encoded.extend([event.kind.value, wire_event(event).model_dump_json()])
-        held = await self._append(
-            keys=[_state_key(replay_id), _events_key(replay_id)], args=encoded
+        held = int(
+            await self._append(keys=[_state_key(replay_id), _events_key(replay_id)], args=encoded)
         )
-        return int(held) != GONE
+        if held == GONE:
+            return AppendOutcome.GONE
+        if held == SUPERSEDED:
+            return AppendOutcome.SUPERSEDED
+        return AppendOutcome.APPENDED
 
     async def delete(self, replay_id: str) -> bool:
         keys = [_state_key(replay_id), _events_key(replay_id), _lease_key(replay_id), ACTIVE_KEY]
@@ -225,6 +283,36 @@ async def _change_once(
     return changed
 
 
+async def _seek_once(
+    pipe: Pipeline,
+    replay_id: str,
+    change: Callable[[ReplayState], ReplayState],
+    lap_number: int,
+) -> ReplayState | None:
+    """Raises `WatchError` when another writer changed the state, or it expired, between the
+    read and the write."""
+    key = _state_key(replay_id)
+    events_key = _events_key(replay_id)
+    await pipe.watch(key)
+    stored = await pipe.get(key)
+    ttl_ms = await pipe.pttl(key)
+    if stored is None:
+        return None
+    changed = change(_decode(stored))
+    reset = ReplayResetEvent(lap_number=lap_number, session_s=changed.playback.session_s)
+    pipe.multi()  # type: ignore[no-untyped-call]  # unannotated in redis-py 8
+    pipe.set(key, _encode(changed), keepttl=True)
+    pipe.delete(events_key)
+    pipe.xadd(
+        events_key,
+        {"kind": reset.kind.value, "data": reset.model_dump_json()},
+        id=f"{changed.generation}-0",
+    )
+    pipe.pexpire(events_key, ttl_ms)
+    await pipe.execute()
+    return changed
+
+
 def _state_key(replay_id: str) -> str:
     return f"replay:{replay_id}:state"
 
@@ -237,10 +325,13 @@ def _lease_key(replay_id: str) -> str:
     return f"replay:{replay_id}:lease"
 
 
-def _entry(entry_id: bytes, fields: dict[bytes, bytes]) -> StreamEntry:
-    return StreamEntry(
-        entry_id.decode(), EventKind(fields[b"kind"].decode()), fields[b"data"].decode()
-    )
+def _entry(entry_id: bytes, fields: dict[bytes, bytes]) -> StreamEntry | ReplayReset:
+    kind = fields[b"kind"].decode()
+    data = fields[b"data"].decode()
+    if kind == StreamSignal.REPLAY_RESET:
+        reset = ReplayResetEvent.model_validate_json(data)
+        return ReplayReset(entry_id.decode(), reset.lap_number, reset.session_s)
+    return StreamEntry(entry_id.decode(), EventKind(kind), data)
 
 
 def _encode(state: ReplayState) -> str:
@@ -248,6 +339,7 @@ def _encode(state: ReplayState) -> str:
         session_key=state.session_key,
         playback=_stored_playback(state.playback),
         failure=state.failure,
+        generation=state.generation,
     ).model_dump_json()
 
 
@@ -267,4 +359,4 @@ def _decode(stored: bytes | str) -> ReplayState:
         if isinstance(stored_playback, _StoredPaused)
         else Playing(stored_playback.speed, stored_playback.session_s, stored_playback.wall_s)
     )
-    return ReplayState(state.session_key, playback, state.failure)
+    return ReplayState(state.session_key, playback, state.failure, state.generation)
