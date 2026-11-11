@@ -23,13 +23,13 @@ Phase 2, the clean model:
 - **Typed tables in PostgreSQL** for every ingested session: meetings, sessions, drivers per session, laps, stints, pits, intervals, positions, race control, weather, results, qualifying phases, starting grid, overtakes and team radio. Times and gaps are exact numbers, a gap of "+1 LAP" is a lap count, closed sets are enums, and constraints reject what the 2024 season did not show ([ADR 0008](docs/adr/0008-deterministic-clean-model.md)).
 - **A deterministic load**: the same raw data gives the same rows, whatever the order, the number of workers or a crash in the middle. Each session is replaced whole in one transaction, a rerun loads only what changed, and a session with bad data fails alone with the document and row that caused it.
 
-Phase 3, the replay (in progress):
+Phase 3, the replay:
 
-- **A replay API** over any session in the clean model: `POST /api/replays` starts one at 1x to 60x, `/pause`, `/resume` and `/speed` control it, `DELETE /api/replays/{id}` stops it and frees its place ([ADR 0011](docs/adr/0011-a-viewer-stops-their-replay.md)), and `GET /api/replays/{id}/events` streams its laps, positions, intervals, pits, race control, weather, overtakes and team radio over Server-Sent Events, in the order and at the pace they happened. A viewer that reconnects resumes after its last event. The events go through a Redis stream per replay; the same session always gives the same stream ([ADR 0009](docs/adr/0009-replay-from-the-clean-model.md)).
-- **The loaded sessions**: `GET /api/sessions` lists every session in the clean model with its meeting, the latest first, and `GET /api/sessions/{session_key}` adds its drivers with their team and colour.
-- **The replay screen** at http://localhost:8080: pick a Grand Prix, one of its sessions and a speed, and watch it as it happened: the leader's lap and the latest flag for the whole track, the timing tower (position, interval or gap to the leader, last lap, tyre and its age, last stop), the last lap of the driver you follow with its sectors and speed traps, the weather and race control. Pause, resume and change the speed while it plays; choosing another session stops the replay you leave. The circuit map and the strategy tools have their place on the screen but are not built yet. Every number on the screen came in an event: the screen keeps the latest value of each, and every race control message.
+- **A replay API** over any session in the clean model: `POST /api/replays` starts one at 1x to 60x, `/pause`, `/resume` and `/speed` control it, `/seek` moves it to the earliest start of a lap ([ADR 0012](docs/adr/0012-seek-to-a-lap.md)), `DELETE /api/replays/{id}` stops it and frees its place ([ADR 0011](docs/adr/0011-a-viewer-stops-their-replay.md)), and `GET /api/replays/{id}/events` streams its laps, positions, intervals, pits, race control, weather, overtakes and team radio over Server-Sent Events, in the order and at the pace they happened. A viewer that reconnects resumes after its last event; after a seek the stream starts again with a reset, then the session from its start up to that lap. The events go through a Redis stream per replay; the same session always gives the same stream ([ADR 0009](docs/adr/0009-replay-from-the-clean-model.md)).
+- **The loaded sessions**: `GET /api/sessions` lists every session in the clean model with its meeting, the latest first, and `GET /api/sessions/{session_key}` adds its drivers with their team and colour, and its last lap number.
+- **The replay screen** at http://localhost:8080: pick a Grand Prix, one of its sessions and a speed, and watch it as it happened: the leader's lap and the latest flag for the whole track, the timing tower (position, interval or gap to the leader, last lap, tyre and its age, last stop), the last lap of the driver you follow with its sectors and speed traps, the weather and race control. Pause, resume and change the speed while it plays, or type a lap and go to it: the screen rebuilds as it was at that lap's start and plays on; choosing another session stops the replay you leave. The circuit map and the strategy tools have their place on the screen but are not built yet. Every number on the screen came in an event: the screen keeps the latest value of each, and every race control message.
 
-Jumping to a lap, the simulator and the assistant do not exist yet.
+The simulator and the assistant do not exist yet.
 
 ## Run it locally
 
@@ -40,7 +40,7 @@ cp .env.example .env
 make up
 ```
 
-Open http://localhost:8080; the replay screen lists the sessions loaded with `make transform` (below). `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` and `TRANSFORM_*` lines from `.env.example`, and one copied before phase 3 the `POSTGRES_POOL_SIZE`, `REDIS_*` and `REPLAY_*` lines.
+Open http://localhost:8080; the replay screen lists the sessions loaded with `make transform` (below). `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` and `TRANSFORM_*` lines from `.env.example`, and one copied before phase 3 the `POSTGRES_POOL_SIZE`, `REDIS_*` and `REPLAY_*` lines, `REPLAY_APPEND_BATCH` included.
 
 Ingest raw data while the stack is up:
 
