@@ -7,10 +7,16 @@ from fastapi import APIRouter, Depends, Header, Path, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, Field
 
-from f1_strategy.adapters.http.responses import NOT_FOUND, UNAVAILABLE, ErrorResponse, Responses
+from f1_strategy.adapters.http.responses import (
+    CONFLICT,
+    NOT_FOUND,
+    UNAVAILABLE,
+    ErrorResponse,
+    Responses,
+)
 from f1_strategy.adapters.http.services import Services
-from f1_strategy.adapters.replay_events import ReplayEvent, ReplayFailedEvent
-from f1_strategy.application.replay import ReplayFailure, ReplayStatus, StreamEntry
+from f1_strategy.adapters.replay_events import ReplayEvent, ReplayFailedEvent, ReplayResetEvent
+from f1_strategy.application.replay import ReplayFailure, ReplayReset, ReplayStatus, StreamEntry
 from f1_strategy.domain.playback import Paused, PlaybackStatus, ReplaySpeed
 
 REPLAY_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
@@ -26,6 +32,10 @@ class StartReplayRequest(BaseModel):
 
 class SpeedRequest(BaseModel):
     speed: ReplaySpeed
+
+
+class SeekRequest(BaseModel):
+    lap_number: int = Field(gt=0)
 
 
 class ReplayResponse(BaseModel):
@@ -84,6 +94,15 @@ async def set_replay_speed(
     return _response(replay_id, await services.control.set_speed(replay_id, body.speed))
 
 
+@router.post("/replays/{replay_id}/seek", responses={**NOT_FOUND, **CONFLICT})
+async def seek_replay(replay_id: ReplayId, body: SeekRequest, services: Services) -> ReplayResponse:
+    """Moves the replay to the earliest start of the lap among its drivers, keeping its status
+    and speed; the event stream sends `replay_reset`, then the session from its start up to
+    there. 404 when the replay is gone or no driver has a start for the lap, 409 when the
+    replay failed."""
+    return _response(replay_id, await services.seek(replay_id, body.lap_number))
+
+
 @router.delete("/replays/{replay_id}", status_code=status.HTTP_204_NO_CONTENT, responses=NOT_FOUND)
 async def stop_replay(replay_id: ReplayId, services: Services) -> None:
     """Removes the replay and frees its place; its event stream ends."""
@@ -96,7 +115,7 @@ async def _watched(
     last_event_id: Annotated[
         str | None, Header(alias="Last-Event-ID", pattern=STREAM_ID_PATTERN)
     ] = None,
-) -> AsyncIterator[StreamEntry | ReplayFailure]:
+) -> AsyncIterator[StreamEntry | ReplayReset | ReplayFailure]:
     # A dependency, so an unknown replay is a 404 before the stream starts.
     return await services.watch(replay_id, last_event_id)
 
@@ -105,10 +124,11 @@ async def _watched(
     "/replays/{replay_id}/events", response_class=EventSourceResponse, responses=STREAM_NOT_FOUND
 )
 async def watch_replay(
-    entries: Annotated[AsyncIterator[StreamEntry | ReplayFailure], Depends(_watched)],
-) -> AsyncIterator[ReplayEvent | ReplayFailedEvent | ServerSentEvent]:
+    entries: Annotated[AsyncIterator[StreamEntry | ReplayReset | ReplayFailure], Depends(_watched)],
+) -> AsyncIterator[ReplayEvent | ReplayResetEvent | ReplayFailedEvent | ServerSentEvent]:
     """The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each
-    event's SSE `event` is its `kind`; the stream ends with `replay_failed` if the replay
+    event's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events
+    rebuild the session from its start; the stream ends with `replay_failed` if the replay
     fails, and when the replay expires."""
     # The models in the annotation are what `data` holds; they put the event schemas in the
     # OpenAPI document, which a ServerSentEvent alone would leave out.
@@ -117,6 +137,12 @@ async def watch_replay(
             failed = ReplayFailedEvent(message=entry.message)
             yield ServerSentEvent(raw_data=failed.model_dump_json(), event=failed.kind)
             return
+        if isinstance(entry, ReplayReset):
+            reset = ReplayResetEvent(lap_number=entry.lap_number, session_s=entry.session_s)
+            yield ServerSentEvent(
+                raw_data=reset.model_dump_json(), id=entry.entry_id, event=reset.kind
+            )
+            continue
         yield ServerSentEvent(raw_data=entry.data, id=entry.entry_id, event=entry.kind)
 
 

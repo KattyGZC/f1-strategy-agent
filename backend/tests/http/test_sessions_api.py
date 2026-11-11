@@ -43,6 +43,7 @@ def test_a_session_reads_with_its_drivers_by_number(client: TestClient) -> None:
             }
             for driver in drivers
         ],
+        "last_lap_number": 1,
     }
 
 

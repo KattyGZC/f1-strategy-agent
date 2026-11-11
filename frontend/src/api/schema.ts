@@ -69,7 +69,8 @@ export interface paths {
         /**
          * Watch Replay
          * @description The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each
-         *     event's SSE `event` is its `kind`; the stream ends with `replay_failed` if the replay
+         *     event's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events
+         *     rebuild the session from its start; the stream ends with `replay_failed` if the replay
          *     fails, and when the replay expires.
          */
         get: operations["watch_replay_api_replays__replay_id__events_get"];
@@ -109,6 +110,29 @@ export interface paths {
         put?: never;
         /** Resume Replay */
         post: operations["resume_replay_api_replays__replay_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/replays/{replay_id}/seek": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seek Replay
+         * @description Moves the replay to the earliest start of the lap among its drivers, keeping its status
+         *     and speed; the event stream sends `replay_reset`, then the session from its start up to
+         *     there. 404 when the replay is gone or no driver has a start for the lap, 409 when the
+         *     replay failed.
+         */
+        post: operations["seek_replay_api_replays__replay_id__seek_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -388,6 +412,26 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * ReplayResetEvent
+         * @description The replay moved to the start of a lap: what was built is dropped, and the events that
+         *     follow rebuild the session from its start up to `session_s`.
+         */
+        ReplayResetEvent: {
+            /**
+             * Kind
+             * @default replay_reset
+             * @constant
+             */
+            kind: "replay_reset";
+            /** Lap Number */
+            lap_number: number;
+            /**
+             * Session S
+             * @description Seconds since the session's first event
+             */
+            session_s: number;
+        };
         /** ReplayResponse */
         ReplayResponse: {
             /** Failure */
@@ -409,6 +453,11 @@ export interface components {
          * @enum {integer}
          */
         ReplaySpeed: 1 | 2 | 5 | 10 | 20 | 60;
+        /** SeekRequest */
+        SeekRequest: {
+            /** Lap Number */
+            lap_number: number;
+        };
         /**
          * ServerSentEvent
          * @description Represents a single Server-Sent Event.
@@ -456,6 +505,11 @@ export interface components {
              * @description By driver number
              */
             drivers: components["schemas"]["DriverResponse"][];
+            /**
+             * Last Lap Number
+             * @description The highest lap number of any driver
+             */
+            last_lap_number: number | null;
             /** Meeting Key */
             meeting_key: number;
             /** Meeting Name */
@@ -828,6 +882,59 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seek_replay_api_replays__replay_id__seek_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeekRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -37,6 +37,7 @@ class DriverResponse(BaseModel):
 
 class SessionEntryResponse(SessionResponse):
     drivers: list[DriverResponse] = Field(description="By driver number")
+    last_lap_number: int | None = Field(description="The highest lap number of any driver")
 
 
 @router.get("/sessions")
@@ -51,6 +52,7 @@ async def read_session(session_key: SessionKey, services: Services) -> SessionEn
     return SessionEntryResponse(
         **_session(entry.session).model_dump(),
         drivers=[_driver(driver) for driver in entry.drivers],
+        last_lap_number=entry.last_lap_number,
     )
 
 

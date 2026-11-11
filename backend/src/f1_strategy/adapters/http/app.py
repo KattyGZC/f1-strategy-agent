@@ -8,6 +8,8 @@ from f1_strategy.adapters.http import health, replays, sessions
 from f1_strategy.adapters.http.services import ApiServices, api_services
 from f1_strategy.adapters.settings import ApiSettings
 from f1_strategy.application.replay import (
+    LapNotFoundError,
+    ReplayFailedError,
     ReplayNotFoundError,
     SessionNotLoadedError,
     TooManyReplaysError,
@@ -16,6 +18,8 @@ from f1_strategy.application.replay import (
 type ServicesFactory = Callable[[], AbstractAsyncContextManager[ApiServices]]
 
 ERROR_STATUS: dict[type[Exception], int] = {
+    LapNotFoundError: status.HTTP_404_NOT_FOUND,
+    ReplayFailedError: status.HTTP_409_CONFLICT,
     ReplayNotFoundError: status.HTTP_404_NOT_FOUND,
     SessionNotLoadedError: status.HTTP_404_NOT_FOUND,
     TooManyReplaysError: status.HTTP_503_SERVICE_UNAVAILABLE,

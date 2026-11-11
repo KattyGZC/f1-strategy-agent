@@ -1,4 +1,5 @@
-"""The first minute of a sampled race, as the API tests load it."""
+"""The first minute of a sampled race, as the API tests load it, with one lap that starts in
+that minute and has not ended."""
 
 from dataclasses import replace
 from datetime import timedelta
@@ -7,13 +8,14 @@ from redis.asyncio import Redis
 
 from f1_strategy.adapters.clean_store import PostgresCleanStore, connection_pool
 from f1_strategy.application.transform import Load, Version
-from f1_strategy.domain.clean import CleanSession, clean_session, content_hash
+from f1_strategy.domain.clean import CleanSession, Lap, clean_session, content_hash
 from f1_strategy.domain.replay import LapCompleted, timeline
 from tests.postgres import CONNECT_TIMEOUT_S
 from tests.samples import RACE, sample
 
 SESSION = int(RACE)
 WINDOW = timedelta(seconds=60)
+LAP_1_S = 30.0
 
 
 def first_minute(session: CleanSession) -> CleanSession:
@@ -39,7 +41,18 @@ def first_minute(session: CleanSession) -> CleanSession:
     )
 
 
-SHORT_RACE = first_minute(clean_session(sample(RACE).raw()))
+def with_lap_1_started(session: CleanSession) -> CleanSession:
+    """Lap 1 of the first driver starts `LAP_1_S` into the session; it has no duration, so it
+    adds no event."""
+    started_at = timeline(session).events[0].at + timedelta(seconds=LAP_1_S)
+    lap = Lap(
+        SESSION, session.drivers[0].driver_number, 1, started_at, None,
+        None, None, None, None, None, None, is_pit_out_lap=False,
+    )  # fmt: skip
+    return replace(session, laps=(*session.laps, lap))
+
+
+SHORT_RACE = with_lap_1_started(first_minute(clean_session(sample(RACE).raw())))
 EVENTS = timeline(SHORT_RACE).events
 
 

@@ -20,13 +20,14 @@ def test_openapi_documents_the_health_response() -> None:
         "/api/replays/{replay_id}/pause",
         "/api/replays/{replay_id}/resume",
         "/api/replays/{replay_id}/speed",
+        "/api/replays/{replay_id}/seek",
         "/api/replays/{replay_id}/events",
         "/api/sessions",
         "/api/sessions/{session_key}",
     }
 
 
-def test_openapi_documents_every_replayed_event_and_the_failure() -> None:
+def test_openapi_documents_every_replayed_event_the_failure_and_the_reset() -> None:
     document = json.loads(render_openapi())
 
     stream = document["paths"]["/api/replays/{replay_id}/events"]["get"]["responses"]
@@ -37,7 +38,7 @@ def test_openapi_documents_every_replayed_event_and_the_failure() -> None:
         document["components"]["schemas"][ref.rsplit("/", 1)[1]]["properties"]["kind"]["const"]
         for ref in union["discriminator"]["mapping"].values()
     }
-    assert {"ReplayEvent", "ReplayFailedEvent"} <= refs
+    assert {"ReplayEvent", "ReplayFailedEvent", "ReplayResetEvent"} <= refs
     assert kinds == {kind.value for kind in EventKind}
     assert stream["404"]["content"] == {
         "application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}
