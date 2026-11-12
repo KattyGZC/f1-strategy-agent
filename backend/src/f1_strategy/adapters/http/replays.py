@@ -97,9 +97,9 @@ async def set_replay_speed(
 @router.post("/replays/{replay_id}/seek", responses={**NOT_FOUND, **CONFLICT})
 async def seek_replay(replay_id: ReplayId, body: SeekRequest, services: Services) -> ReplayResponse:
     """Moves the replay to the earliest start of the lap among its drivers, keeping its status
-    and speed; the event stream sends `replay_reset`, then the session from its start up to
-    there. 404 when the replay is gone or no driver has a start for the lap, 409 when the
-    replay failed."""
+    and speed; the event stream sends `replay_reset`, then the events still current there,
+    then the paced events after it. 404 when the replay is gone or no driver has a start for
+    the lap, 409 when the replay failed."""
     return _response(replay_id, await services.seek(replay_id, body.lap_number))
 
 
@@ -128,8 +128,8 @@ async def watch_replay(
 ) -> AsyncIterator[ReplayEvent | ReplayResetEvent | ReplayFailedEvent | ServerSentEvent]:
     """The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each
     event's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events
-    rebuild the session from its start; the stream ends with `replay_failed` if the replay
-    fails, and when the replay expires."""
+    still current at the lap rebuild the session as it was there; the stream ends with
+    `replay_failed` if the replay fails, and when the replay expires."""
     # The models in the annotation are what `data` holds; they put the event schemas in the
     # OpenAPI document, which a ServerSentEvent alone would leave out.
     async for entry in entries:

@@ -302,7 +302,7 @@ async def test_a_seek_replaces_the_stream_with_its_reset_and_keeps_the_expiry(
     await replays.create(REPLAY, PLAYING)
     await replays.append(REPLAY, 0, 0, EVENTS)
 
-    changed = await replays.seek(REPLAY, sought(1, 95.0), 3)
+    changed = await replays.seek(REPLAY, sought(1, 95.0), 3, [])
 
     assert changed == ReplayState(9472, Paused(ReplaySpeed.X10, 95.0), generation=1)
     assert await replays.state(REPLAY) == changed
@@ -314,11 +314,32 @@ async def test_a_seek_replaces_the_stream_with_its_reset_and_keeps_the_expiry(
     assert read.entries == (ReplayReset("1-0", 3, 95.0),)
 
 
+async def test_a_seek_sends_its_catch_up_at_the_events_own_ids_and_the_producer_follows(
+    redis: Redis,
+) -> None:
+    replays = store(redis)
+    await replays.create(REPLAY, PLAYING)
+    caught_up = [(1, EVENTS[1]), (3, EVENTS[3])]
+
+    await replays.seek(REPLAY, sought(1, 95.0), 3, caught_up)
+    outcome = await replays.append(REPLAY, 1, 4, EVENTS[4:])
+    read = await replays.read(REPLAY, None, BLOCK_S)
+
+    assert outcome is AppendOutcome.APPENDED
+    assert await replays.sent(REPLAY) == 5
+    assert read is not None
+    assert read.entries == (
+        ReplayReset("1-0", 3, 95.0),
+        *entries_of(EVENTS[1:2], first=1, generation=1),
+        *entries_of(EVENTS[3:], first=3, generation=1),
+    )
+
+
 async def test_a_new_generation_appends_after_its_reset(redis: Redis) -> None:
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
     await replays.append(REPLAY, 0, 0, EVENTS[:2])
-    await replays.seek(REPLAY, sought(1, 95.0), 3)
+    await replays.seek(REPLAY, sought(1, 95.0), 3, [])
 
     outcome = await replays.append(REPLAY, 1, 0, EVENTS[:3])
     read = await replays.read(REPLAY, "0-2", BLOCK_S)
@@ -333,7 +354,7 @@ async def test_an_append_of_a_generation_a_seek_replaced_appends_nothing(redis: 
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
     await replays.append(REPLAY, 0, 0, EVENTS[:2])
-    await replays.seek(REPLAY, sought(1, 95.0), 3)
+    await replays.seek(REPLAY, sought(1, 95.0), 3, [])
 
     outcome = await replays.append(REPLAY, 0, 2, EVENTS[2:])
 
@@ -344,10 +365,10 @@ async def test_an_append_of_a_generation_a_seek_replaced_appends_nothing(redis: 
 async def test_a_second_seek_drops_the_first_generation(redis: Redis) -> None:
     replays = store(redis)
     await replays.create(REPLAY, PLAYING)
-    await replays.seek(REPLAY, sought(1, 95.0), 3)
+    await replays.seek(REPLAY, sought(1, 95.0), 3, [])
     await replays.append(REPLAY, 1, 0, EVENTS)
 
-    await replays.seek(REPLAY, sought(2, 10.0), 1)
+    await replays.seek(REPLAY, sought(2, 10.0), 1, [])
     read = await replays.read(REPLAY, None, BLOCK_S)
 
     assert read is not None
@@ -361,7 +382,7 @@ async def test_a_reader_waiting_through_a_seek_receives_the_reset(redis: Redis) 
     reading = asyncio.create_task(replays.read(REPLAY, "0-2", 5.0))
     await asyncio.sleep(0.1)
 
-    await replays.seek(REPLAY, sought(1, 95.0), 3)
+    await replays.seek(REPLAY, sought(1, 95.0), 3, [])
 
     read = await asyncio.wait_for(reading, timeout=2.0)
     assert read is not None
@@ -369,7 +390,7 @@ async def test_a_reader_waiting_through_a_seek_receives_the_reset(redis: Redis) 
 
 
 async def test_seeking_an_unknown_replay_changes_nothing(redis: Redis) -> None:
-    assert await store(redis).seek("missing", sought(1, 95.0), 3) is None
+    assert await store(redis).seek("missing", sought(1, 95.0), 3, [(0, EVENTS[0])]) is None
     assert await redis.keys("replay:missing:*") == []
 
 
@@ -385,7 +406,7 @@ async def test_a_seek_that_keeps_losing_the_race_gives_up(
         return sought(1, 95.0)(state)
 
     with pytest.raises(RuntimeError, match="changed 5 times while sought"):
-        await replays.seek(REPLAY, change_raced_by_another_writer, 3)
+        await replays.seek(REPLAY, change_raced_by_another_writer, 3, [(0, EVENTS[0])])
 
     rival.close()
     assert await replays.state(REPLAY) == PLAYING

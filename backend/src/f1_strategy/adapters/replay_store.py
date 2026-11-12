@@ -6,7 +6,8 @@ from the last read of a viewer: a replay nobody watches for `idle_ttl_s` disappe
 stream.
 
 Entry ids are `<generation>-<n>`: a seek replaces the stream with its reset, `<generation>-0`,
-and event n of the timeline follows as `<generation>-<n>` (ADR 0012).
+and event n of the timeline follows as `<generation>-<n>` (ADR 0012). The events a seek sends
+at once skip the ones replaced before its lap, so their ids may jump (ADR 0013).
 """
 
 from collections.abc import Callable, Sequence
@@ -17,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from redis.asyncio import BlockingConnectionPool, Redis
 from redis.asyncio.client import Pipeline
 from redis.exceptions import WatchError
+from redis.typing import EncodableT, FieldT
 
 from f1_strategy.adapters.replay_events import ReplayResetEvent, StreamSignal, wire_event
 from f1_strategy.application.replay import (
@@ -210,12 +212,17 @@ class RedisReplayStore:
         raise RuntimeError(f"replay {replay_id} changed {UPDATE_ATTEMPTS} times while updated")
 
     async def seek(
-        self, replay_id: str, change: Callable[[ReplayState], ReplayState], lap_number: int
+        self,
+        replay_id: str,
+        change: Callable[[ReplayState], ReplayState],
+        lap_number: int,
+        caught_up: Sequence[tuple[int, Event]],
     ) -> ReplayState | None:
+        encoded = [(index + 1, _fields(event)) for index, event in caught_up]
         async with self._redis.pipeline(transaction=True) as pipe:
             for _ in range(UPDATE_ATTEMPTS):
                 with suppress(WatchError):
-                    return await _seek_once(pipe, replay_id, change, lap_number)
+                    return await _seek_once(pipe, replay_id, change, lap_number, encoded)
         raise RuntimeError(f"replay {replay_id} changed {UPDATE_ATTEMPTS} times while sought")
 
     async def sent(self, replay_id: str) -> int:
@@ -226,7 +233,7 @@ class RedisReplayStore:
     ) -> AppendOutcome:
         encoded: list[str | int] = [generation, first_index]
         for event in events:
-            encoded.extend([event.kind.value, wire_event(event).model_dump_json()])
+            encoded.extend(_encoded(event))
         held = int(
             await self._append(keys=[_state_key(replay_id), _events_key(replay_id)], args=encoded)
         )
@@ -288,6 +295,7 @@ async def _seek_once(
     replay_id: str,
     change: Callable[[ReplayState], ReplayState],
     lap_number: int,
+    caught_up: Sequence[tuple[int, dict[FieldT, EncodableT]]],
 ) -> ReplayState | None:
     """Raises `WatchError` when another writer changed the state, or it expired, between the
     read and the write."""
@@ -308,9 +316,21 @@ async def _seek_once(
         {"kind": reset.kind.value, "data": reset.model_dump_json()},
         id=f"{changed.generation}-0",
     )
+    for n, fields in caught_up:
+        pipe.xadd(events_key, fields, id=f"{changed.generation}-{n}")
     pipe.pexpire(events_key, ttl_ms)
     await pipe.execute()
     return changed
+
+
+def _encoded(event: Event) -> tuple[str, str]:
+    """The event's kind and its JSON, as a stream entry holds them."""
+    return event.kind.value, wire_event(event).model_dump_json()
+
+
+def _fields(event: Event) -> dict[FieldT, EncodableT]:
+    kind, data = _encoded(event)
+    return {"kind": kind, "data": data}
 
 
 def _state_key(replay_id: str) -> str:
