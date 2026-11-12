@@ -5,7 +5,7 @@ replay's content never depends on how fast or when it is played.
 """
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -129,6 +129,36 @@ def timeline(rows: TimelineRows) -> Timeline:
     return Timeline(
         tuple(sorted(events, key=_order)), len(rows.laps) - len(laps), _lap_starts(rows.laps)
     )
+
+
+def still_current(events: Sequence[Event]) -> tuple[int, ...]:
+    """The positions, among `events`, of those no later one of them replaces (ADR 0013).
+
+    A driver's position, interval and last lap, and the weather, are values that the next event
+    of the same kind and driver replaces; every other event is a record of its own and always
+    stays. The last event always stays, since nothing comes after it."""
+    replaced: set[Hashable] = set()
+    kept: list[int] = []
+    for index in reversed(range(len(events))):
+        key = _value_key(events[index])
+        if key not in replaced:
+            kept.append(index)
+            replaced.add(key)
+    return tuple(reversed(kept))
+
+
+def _value_key(event: Event) -> Hashable:
+    """Events with the same key state the same value, so the later replaces the earlier. A
+    record is its own key: nothing replaces it."""
+    match event.payload:
+        case Position() | Interval():
+            return event.kind, event.payload.driver_number
+        case LapCompleted():
+            return event.kind, event.payload.lap.driver_number
+        case Weather():
+            return event.kind
+        case _:
+            return event
 
 
 def _lap_starts(laps: Sequence[Lap]) -> dict[int, datetime]:
