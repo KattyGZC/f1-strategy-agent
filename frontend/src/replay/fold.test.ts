@@ -179,4 +179,33 @@ describe('foldBatch', () => {
   it('leaves nothing after a reset alone', () => {
     expect(foldBatch(fold(position(1, 1)), { reset: true, events: [] })).toBe(EMPTY_REPLAY)
   })
+
+  it("rebuilds from a seek's catch-up the screen that every event builds (ADR 0013)", () => {
+    const record = [
+      raceControl(1, 'YELLOW IN TRACK', { scope: 'Track', flag: 'YELLOW' }),
+      pit(1, 4),
+      OVERTAKE,
+      TEAM_RADIO,
+      raceControl(2, 'GREEN LIGHT'),
+    ]
+    const replaced = [
+      position(1, 2),
+      interval(1, { gap_to_leader_s: 3.1, interval_s: 3.1 }),
+      lap(1, 4),
+      WEATHER,
+    ]
+    const current = [
+      position(16, 1),
+      { ...WEATHER, track_temperature: 27.4 },
+      position(1, 1),
+      interval(1, {}),
+      lap(1, 5, { lap_duration: 91.2 }),
+      { ...TEAM_RADIO, at: '2024-03-02T15:04:00.000Z' },
+    ]
+    const every = [...replaced.slice(0, 2), ...record, ...replaced.slice(2), ...current]
+
+    const state = foldBatch(fold(position(44, 9)), { reset: true, events: [...record, ...current] })
+
+    expect(state).toEqual(fold(...every))
+  })
 })
