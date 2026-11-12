@@ -12,10 +12,11 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0006](0006-raw-data-scope.md) | Raw data scope: Race and Qualifying by season, telemetry by session | Accepted; telemetry superseded by 0007 |
 | [0007](0007-telemetry-of-the-latest-grand-prix.md) | Telemetry of the latest settled Grand Prix, one session kept | Accepted |
 | [0008](0008-deterministic-clean-model.md) | A deterministic clean model: one transaction per session, replaced whole | Accepted |
-| [0009](0009-replay-from-the-clean-model.md) | Replay from the clean model, through Redis Streams, to the browser over SSE | Accepted |
+| [0009](0009-replay-from-the-clean-model.md) | Replay from the clean model, through Redis Streams, to the browser over SSE | Accepted; seek catch-up superseded by 0013 |
 | [0010](0010-quality-gates.md) | Quality gates: the agent cannot commit red, main cannot merge red except by its owner | Accepted |
 | [0011](0011-a-viewer-stops-their-replay.md) | A viewer stops their replay | Accepted |
-| [0012](0012-seek-to-a-lap.md) | A seek replaces the replay's stream with a new generation | Accepted |
+| [0012](0012-seek-to-a-lap.md) | A seek replaces the replay's stream with a new generation | Accepted; seek catch-up superseded by 0013 |
+| [0013](0013-a-seek-sends-what-is-still-current.md) | A seek sends at once only the events still current at its lap | Accepted |
 
 ## Template
 

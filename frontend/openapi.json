@@ -636,7 +636,7 @@
       },
       "ReplayResetEvent": {
         "additionalProperties": false,
-        "description": "The replay moved to the start of a lap: what was built is dropped, and the events that\nfollow rebuild the session from its start up to `session_s`.",
+        "description": "The replay moved to the start of a lap: what was built is dropped, and the events that\nfollow rebuild the session as it was at `session_s`.",
         "properties": {
           "kind": {
             "const": "replay_reset",
@@ -1289,7 +1289,7 @@
     },
     "/api/replays/{replay_id}/events": {
       "get": {
-        "description": "The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each\nevent's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events\nrebuild the session from its start; the stream ends with `replay_failed` if the replay\nfails, and when the replay expires.",
+        "description": "The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each\nevent's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events\nstill current at the lap rebuild the session as it was there; the stream ends with\n`replay_failed` if the replay fails, and when the replay expires.",
         "operationId": "watch_replay_api_replays__replay_id__events_get",
         "parameters": [
           {
@@ -1502,7 +1502,7 @@
     },
     "/api/replays/{replay_id}/seek": {
       "post": {
-        "description": "Moves the replay to the earliest start of the lap among its drivers, keeping its status\nand speed; the event stream sends `replay_reset`, then the session from its start up to\nthere. 404 when the replay is gone or no driver has a start for the lap, 409 when the\nreplay failed.",
+        "description": "Moves the replay to the earliest start of the lap among its drivers, keeping its status\nand speed; the event stream sends `replay_reset`, then the events still current there,\nthen the paced events after it. 404 when the replay is gone or no driver has a start for\nthe lap, 409 when the replay failed.",
         "operationId": "seek_replay_api_replays__replay_id__seek_post",
         "parameters": [
           {

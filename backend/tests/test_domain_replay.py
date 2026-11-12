@@ -23,7 +23,14 @@ from f1_strategy.domain.clean import (
     Weather,
     clean_session,
 )
-from f1_strategy.domain.replay import EventKind, LapCompleted, Timeline, timeline
+from f1_strategy.domain.replay import (
+    Event,
+    EventKind,
+    LapCompleted,
+    Timeline,
+    still_current,
+    timeline,
+)
 from tests.replay_rows import Rows
 from tests.samples import QUALIFYING, RACE, sample
 
@@ -80,6 +87,14 @@ def weather(at: datetime = T0) -> Weather:
         wind_speed=Decimal(1),
         wind_direction=90,
     )
+
+
+def interval(driver_number: int, at: datetime = T0) -> Interval:
+    return Interval(SESSION, driver_number, at, Decimal(1), None, Decimal(1), None)
+
+
+def pit(driver_number: int, lap_number: int, at: datetime = T0) -> Pit:
+    return Pit(SESSION, driver_number, lap_number, at, None, None)
 
 
 def only_lap(rows: Rows) -> LapCompleted:
@@ -319,6 +334,16 @@ TYING_ROWS = st.builds(
         st.builds(TeamRadio, st.just(SESSION), DRIVERS, INSTANTS, st.just("u")),
         unique_by=lambda row: (row.driver_number, row.date),
     ),
+    intervals=st.lists(
+        st.builds(interval, DRIVERS, INSTANTS), unique_by=lambda row: (row.driver_number, row.date)
+    ),
+    pits=st.lists(
+        st.builds(pit, DRIVERS, st.integers(1, 3), INSTANTS),
+        unique_by=(
+            lambda row: (row.driver_number, row.lap_number),
+            lambda row: (row.driver_number, row.date),
+        ),
+    ),
 )
 
 
@@ -329,3 +354,71 @@ def test_any_arrival_order_gives_the_same_timeline(rows: Rows, data: st.DataObje
     )
 
     assert timeline(arrived) == timeline(rows)
+
+
+def test_nothing_is_current_among_no_events() -> None:
+    assert still_current(()) == ()
+
+
+def test_a_later_value_of_the_same_driver_replaces_an_earlier_one() -> None:
+    later = T0 + timedelta(seconds=1)
+    events = timeline(
+        Rows(
+            positions=[position(1), position(16), position(1, later)],
+            intervals=[interval(1), interval(1, later)],
+            laps=[lap(1, 1), lap(1, 2, date_start=later)],
+            weather=[weather(), weather(later)],
+        )
+    ).events
+
+    kept = [events[index].payload for index in still_current(events)]
+
+    assert kept == [
+        position(16),
+        weather(later),
+        position(1, later),
+        interval(1, later),
+        LapCompleted(lap(1, 2, date_start=later), None, None),
+    ]
+
+
+def test_records_stay_whatever_comes_after_them() -> None:
+    later = T0 + timedelta(seconds=1)
+    rows = Rows(
+        race_control=[race_control(0), race_control(1, later)],
+        pits=[pit(1, 1), pit(1, 2, later)],
+        overtakes=[Overtake(SESSION, T0, 1, 16, 2), Overtake(SESSION, later, 1, 16, 1)],
+        team_radio=[TeamRadio(SESSION, 1, T0, "a"), TeamRadio(SESSION, 1, later, "b")],
+    )
+    events = timeline(rows).events
+
+    assert still_current(events) == tuple(range(len(events)))
+
+
+def _value_of(event: Event) -> tuple[EventKind, int | None] | None:
+    """What an event states the latest value of, as ADR 0013 lists them."""
+    match event.payload:
+        case Position() | Interval():
+            return event.kind, event.payload.driver_number
+        case LapCompleted():
+            return event.kind, event.payload.lap.driver_number
+        case Weather():
+            return event.kind, None
+        case _:
+            return None
+
+
+@given(rows=TYING_ROWS)
+def test_an_event_stays_current_unless_a_later_one_states_the_same_value(rows: Rows) -> None:
+    events = timeline(rows).events
+
+    expected = tuple(
+        index
+        for index, event in enumerate(events)
+        if _value_of(event) is None
+        or all(_value_of(later) != _value_of(event) for later in events[index + 1 :])
+    )
+
+    assert still_current(events) == expected
+    if events:
+        assert expected[-1] == len(events) - 1

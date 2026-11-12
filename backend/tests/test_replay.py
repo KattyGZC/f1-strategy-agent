@@ -143,20 +143,26 @@ class MemoryStore:
         return self.states[replay_id]
 
     async def seek(
-        self, replay_id: str, change: Callable[[ReplayState], ReplayState], lap_number: int
+        self,
+        replay_id: str,
+        change: Callable[[ReplayState], ReplayState],
+        lap_number: int,
+        caught_up: Sequence[tuple[int, Event]],
     ) -> ReplayState | None:
         if replay_id not in self.states:
             return None
         changed = change(self.states[replay_id])
         self.states[replay_id] = changed
-        self.streams[replay_id] = []
+        now_s = self._clock()
+        self.streams[replay_id] = [Sent(index, event, now_s) for index, event in caught_up]
         self.resets[replay_id] = ReplayReset(
             f"{changed.generation}-0", lap_number, changed.playback.session_s
         )
         return changed
 
     async def sent(self, replay_id: str) -> int:
-        return len(self.streams.get(replay_id, []))
+        stream = self.streams.get(replay_id, [])
+        return stream[-1].index + 1 if stream else 0
 
     async def append(
         self, replay_id: str, generation: int, first_index: int, events: Sequence[Event]
@@ -166,7 +172,7 @@ class MemoryStore:
         if generation < self.states[replay_id].generation:
             return AppendOutcome.SUPERSEDED
         stream = self.streams[replay_id]
-        assert first_index == len(stream), "an append must continue the stream exactly"
+        assert first_index == await self.sent(replay_id), "an append must continue the stream"
         now_s = self._clock()
         stream.extend(Sent(first_index + i, event, now_s) for i, event in enumerate(events))
         self.append_sizes.append(len(events))
@@ -253,6 +259,7 @@ class SoughtBeforeAppend(MemoryStore):
                     state, generation=1, playback=Playing(ReplaySpeed.X60, 4.0, self._clock())
                 ),
                 2,
+                [],
             )
         return read
 
@@ -775,6 +782,29 @@ async def test_a_seek_sends_the_session_up_to_the_lap_at_once_then_plays_on() ->
     await producers.aclose()
 
 
+def one_driver_at(offsets_s: Sequence[float]) -> Rows:
+    return Rows(
+        positions=[
+            Position(SESSION, 1, T0 + timedelta(seconds=offset_s), 1) for offset_s in offsets_s
+        ]
+    )
+
+
+async def test_a_seek_sends_only_what_is_still_current_at_the_lap_then_plays_on() -> None:
+    w = world({SESSION: with_laps(one_driver_at(OFFSETS_S), {2: LAP_2_S})})
+    w.begin(ReplaySpeed.X1)
+    producers = ReplayProducers(w.produce, w.store)
+    w.clock.at(1012.0, lambda: w.seek(producers)(REPLAY, 2))
+
+    producers.ensure(REPLAY)
+    await until(lambda: w.store.states[REPLAY].generation == 1 and w.clock.now_s >= 1018.0)
+
+    events = timeline(one_driver_at(OFFSETS_S)).events
+    assert w.store.times() == [(2, 1012.0), (3, 1018.0)]
+    assert w.store.events() == [events[2], events[3]]
+    await producers.aclose()
+
+
 async def test_a_seek_while_paused_rebuilds_up_to_the_lap_and_stays_paused() -> None:
     w = lapped_world()
     w.begin(ReplaySpeed.X1)
@@ -797,7 +827,7 @@ async def test_a_seek_reports_the_new_state_and_starts_a_producer() -> None:
     producers = ReplayProducers(w.produce, w.store)
 
     status = await w.seek(producers)(REPLAY, 1)
-    await until(lambda: len(w.store.streams[REPLAY]) == 1)
+    await until(lambda: REPLAY in w.store.leases)
 
     sought_state = ReplayState(SESSION, Playing(ReplaySpeed.X5, 0.0, 1030.0), generation=1)
     assert status == ReplayStatus(sought_state, 0.0)

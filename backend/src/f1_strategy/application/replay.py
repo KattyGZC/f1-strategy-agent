@@ -2,8 +2,8 @@
 
 The content of a replay is its session's timeline; pacing only decides when each event is
 appended. What was appended is the progress: a producer that starts again resumes after it.
-A seek starts a new generation of the stream, which the producer fills from the start
-(ADR 0012).
+A seek starts a new generation of the stream with the events still current at its lap, and
+the producer goes on from there (ADR 0012, ADR 0013).
 """
 
 import asyncio
@@ -16,6 +16,7 @@ from f1_strategy.domain.playback import (
     Paused,
     Playback,
     ReplaySpeed,
+    catch_up,
     due_until,
     lap_start_s,
     offsets_s,
@@ -84,7 +85,7 @@ class StreamEntry:
 @dataclass(frozen=True)
 class ReplayReset:
     """The first entry of a generation: a viewer drops what it built and rebuilds from the
-    entries after it, the session from its start up to `session_s`."""
+    entries after it, the session as it was at `session_s`."""
 
     entry_id: str
     lap_number: int
@@ -129,11 +130,15 @@ class ReplayStore(Protocol):
         ...
 
     async def seek(
-        self, replay_id: str, change: Callable[[ReplayState], ReplayState], lap_number: int
+        self,
+        replay_id: str,
+        change: Callable[[ReplayState], ReplayState],
+        lap_number: int,
+        caught_up: Sequence[tuple[int, Event]],
     ) -> ReplayState | None:
         """Apply `change`, which starts a new generation, and replace the stream with that
-        generation's reset to `lap_number`, in one atomic step; None when the replay does not
-        exist."""
+        generation's reset to `lap_number` followed by `caught_up`, each event at its index in
+        the timeline, in one atomic step; None when the replay does not exist."""
         ...
 
     async def sent(self, replay_id: str) -> int:
@@ -173,8 +178,9 @@ class WallClock(Protocol):
 
 @dataclass(frozen=True)
 class ReplayPolicy:
-    """`append_batch` caps the events of one append: Redis runs an append alone, so a seek's
-    catch-up goes in pieces between which every other replay's commands run."""
+    """`append_batch` caps the events of one append: Redis runs an append alone, so a producer
+    far behind its replay catches up in pieces between which every other replay's commands
+    run."""
 
     tick_s: float
     lease_s: float
@@ -395,7 +401,8 @@ class StartReplay:
 
 
 class SeekReplay:
-    """Moves a replay to the earliest start of a lap; its viewers rebuild from a reset."""
+    """Moves a replay to the earliest start of a lap; its viewers rebuild from a reset and the
+    session's events up to the lap that are still current there (ADR 0013)."""
 
     def __init__(
         self, rows: ReplayRows, store: ReplayStore, producers: ReplayProducers, clock: WallClock
@@ -409,12 +416,20 @@ class SeekReplay:
         state = await self._store.state(replay_id)
         if state is None:
             raise ReplayNotFoundError(replay_id)
-        session_s = lap_start_s(await session_timeline(self._rows, state.session_key), lap_number)
+        built = await session_timeline(self._rows, state.session_key)
+        session_s = lap_start_s(built, lap_number)
         if session_s is None:
             raise LapNotFoundError(state.session_key, lap_number)
+        # About 28 ms of CPU for a race's last lap (measured 2026-11-12), off the event loop as
+        # the timeline is.
+        kept = await asyncio.to_thread(catch_up, built, session_s)
+        caught_up = [(index, built.events[index]) for index in kept]
         now = self._clock()
         changed = await self._store.seek(
-            replay_id, lambda state: _sought(replay_id, state, session_s, now), lap_number
+            replay_id,
+            lambda state: _sought(replay_id, state, session_s, now),
+            lap_number,
+            caught_up,
         )
         if changed is None:
             raise ReplayNotFoundError(replay_id)

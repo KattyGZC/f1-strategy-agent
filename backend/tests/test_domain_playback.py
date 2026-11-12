@@ -10,6 +10,7 @@ from f1_strategy.domain.playback import (
     Playback,
     Playing,
     ReplaySpeed,
+    catch_up,
     due_until,
     lap_start_s,
     offsets_s,
@@ -185,3 +186,44 @@ def test_a_lap_without_a_start_cannot_be_sought() -> None:
 
 def test_a_timeline_without_events_has_no_lap_to_seek() -> None:
     assert lap_start_s(Timeline((), 0, {1: T0}), 1) is None
+
+
+def test_a_catch_up_ends_at_the_last_event_up_to_the_seek() -> None:
+    rows = Rows(
+        positions=[
+            Position(1, 1, T0, 1),
+            Position(1, 16, T0 + timedelta(seconds=1), 2),
+            Position(1, 1, T0 + timedelta(seconds=2), 2),
+            Position(1, 16, T0 + timedelta(seconds=2), 1),
+            Position(1, 1, T0 + timedelta(seconds=3), 1),
+        ]
+    )
+
+    assert catch_up(timeline(rows), 2.0) == (2, 3)
+
+
+def test_a_seek_before_the_first_event_catches_up_nothing() -> None:
+    rows = Rows(positions=[Position(1, 1, T0, 1)])
+
+    assert catch_up(timeline(rows), -10.0) == ()
+
+
+@given(
+    offsets=st.lists(SESSION_TIMES_S, max_size=50).map(sorted),
+    session_s=SESSION_TIMES_S,
+    before=st.sampled_from([Playing(ReplaySpeed.X1, 0.0, 0.0), Paused(ReplaySpeed.X1, 0.0)]),
+)
+def test_after_a_catch_up_the_next_event_due_is_the_first_one_it_left_out(
+    offsets: list[float], session_s: float, before: Playback
+) -> None:
+    rows = Rows(
+        positions=[
+            Position(1, 1, T0 + timedelta(seconds=offset_s), 1) for offset_s in sorted(set(offsets))
+        ]
+    )
+    built = timeline(rows)
+
+    caught_up = catch_up(built, session_s)
+
+    due = due_until(sought(before, session_s, WALL_S), offsets_s(built), 0, WALL_S)
+    assert caught_up == (() if due == 0 else (due - 1,))

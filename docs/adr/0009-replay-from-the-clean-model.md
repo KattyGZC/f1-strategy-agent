@@ -1,6 +1,6 @@
 # 0009. Replay from the clean model, through Redis Streams, to the browser over SSE
 
-- Status: Accepted
+- Status: Accepted; the catch-up of a seek superseded by 0013
 - Date: 2026-10-29
 
 ## Context

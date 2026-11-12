@@ -70,8 +70,8 @@ export interface paths {
          * Watch Replay
          * @description The replay's events from the start, or after `Last-Event-ID`, as they fall due. Each
          *     event's SSE `event` is its `kind`. A seek sends `replay_reset`, after which the events
-         *     rebuild the session from its start; the stream ends with `replay_failed` if the replay
-         *     fails, and when the replay expires.
+         *     still current at the lap rebuild the session as it was there; the stream ends with
+         *     `replay_failed` if the replay fails, and when the replay expires.
          */
         get: operations["watch_replay_api_replays__replay_id__events_get"];
         put?: never;
@@ -128,9 +128,9 @@ export interface paths {
         /**
          * Seek Replay
          * @description Moves the replay to the earliest start of the lap among its drivers, keeping its status
-         *     and speed; the event stream sends `replay_reset`, then the session from its start up to
-         *     there. 404 when the replay is gone or no driver has a start for the lap, 409 when the
-         *     replay failed.
+         *     and speed; the event stream sends `replay_reset`, then the events still current there,
+         *     then the paced events after it. 404 when the replay is gone or no driver has a start for
+         *     the lap, 409 when the replay failed.
          */
         post: operations["seek_replay_api_replays__replay_id__seek_post"];
         delete?: never;
@@ -415,7 +415,7 @@ export interface components {
         /**
          * ReplayResetEvent
          * @description The replay moved to the start of a lap: what was built is dropped, and the events that
-         *     follow rebuild the session from its start up to `session_s`.
+         *     follow rebuild the session as it was at `session_s`.
          */
         ReplayResetEvent: {
             /**

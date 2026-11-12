@@ -29,7 +29,7 @@ class ReplayFailedEvent(BaseModel):
 
 class ReplayResetEvent(BaseModel):
     """The replay moved to the start of a lap: what was built is dropped, and the events that
-    follow rebuild the session from its start up to `session_s`."""
+    follow rebuild the session as it was at `session_s`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

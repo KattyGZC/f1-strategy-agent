@@ -1,6 +1,6 @@
 # 0012. A seek replaces the replay's stream with a new generation
 
-- Status: Accepted
+- Status: Accepted; the catch-up of a seek superseded by 0013
 - Date: 2026-11-10
 
 ## Context

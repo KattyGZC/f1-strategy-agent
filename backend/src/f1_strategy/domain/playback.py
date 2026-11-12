@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
-from f1_strategy.domain.replay import Timeline
+from f1_strategy.domain.replay import Timeline, still_current
 
 
 class ReplaySpeed(IntEnum):
@@ -100,6 +100,13 @@ def offsets_s(timeline: Timeline) -> tuple[float, ...]:
         return ()
     first = timeline.events[0].at
     return tuple((event.at - first).total_seconds() for event in timeline.events)
+
+
+def catch_up(timeline: Timeline, session_s: float) -> tuple[int, ...]:
+    """The positions in the timeline of what a seek to `session_s` sends at once: of the events
+    up to it, those no later one up to it replaces (ADR 0013). The last of them is the last
+    event up to `session_s`, so the paced events follow right after it."""
+    return still_current(timeline.events[: bisect_right(offsets_s(timeline), session_s)])
 
 
 def lap_start_s(timeline: Timeline, lap_number: int) -> float | None:
