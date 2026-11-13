@@ -133,6 +133,7 @@ pytest_add_cli_args = ["--no-cov", "-p", "no:cacheprovider"]
 pytest_add_cli_args_test_selection = [
     "tests/test_domain_clean.py",
     "tests/test_domain_clean_laps.py",
+    "tests/test_domain_lap_time_model.py",
     "tests/test_domain_least_squares.py",
     "tests/test_domain_openf1.py",
     "tests/test_domain_playback.py",
