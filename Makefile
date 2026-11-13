@@ -5,7 +5,7 @@ UNEXPLAINED_SUPPRESSION := (\# noqa(: [A-Z0-9, ]+)?|\# type: ignore(\[[^]]*\])?|
 CLI := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
 MIGRATE := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.migrate
 
-.PHONY: install check fast-check backend-static backend-check frontend-static frontend-check mutation openapi openapi-check format up down logs migrate ingest ingest-telemetry transform
+.PHONY: install check fast-check backend-static backend-check frontend-static frontend-check mutation openapi openapi-check format up down logs migrate ingest ingest-telemetry transform calibrate
 
 install:
 	cd backend && uv sync --locked
@@ -78,3 +78,7 @@ ingest-telemetry:
 transform:
 	$(if $(YEAR),,$(error YEAR is required, e.g. make transform YEAR=2024))
 	$(CLI) transform --year $(YEAR)
+
+calibrate:
+	$(if $(YEAR),,$(error YEAR is required, e.g. make calibrate YEAR=2024))
+	$(CLI) calibrate --year $(YEAR)

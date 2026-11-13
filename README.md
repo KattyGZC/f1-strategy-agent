@@ -29,7 +29,13 @@ Phase 3, the replay:
 - **The loaded sessions**: `GET /api/sessions` lists every session in the clean model with its meeting, the latest first, and `GET /api/sessions/{session_key}` adds its drivers with their team and colour, and its last lap number.
 - **The replay screen** at http://localhost:8080: pick a Grand Prix, one of its sessions and a speed, and watch it as it happened: the leader's lap and the latest flag for the whole track, the timing tower (position, interval or gap to the leader, last lap, tyre and its age, last stop), the last lap of the driver you follow with its sectors and speed traps, the weather and race control. Pause, resume and change the speed while it plays, or type a lap and go to it: the screen rebuilds as it was at that lap's start and plays on; choosing another session stops the replay you leave. The circuit map and the strategy tools have their place on the screen but are not built yet. Every number on the screen came in an event: the screen keeps the latest value of each, and every race control message.
 
-The simulator and the assistant do not exist yet.
+Phase 4, the predictive engine:
+
+- **A lap-time model per race**, calibrated on its clean laps: for each compound a base lap time and a degradation per lap of tyre age, one slope per lap of race shared by the dry compounds (fuel burn and track evolution together, since there is no fuel data) and one for intermediates (the track dries while they run), and each driver's pace against the average car. A lap counts only when nothing else explains its time: lap 1, pit laps, safety car, virtual safety car and red flag periods and the lap after them, slick laps in the rain and the 20 minutes after it, and outliers are left out, each with its reason ([ADR 0014](docs/adr/0014-per-race-linear-lap-time-model.md)).
+- **Predictions of a stint**: given a compound, the tyre's age, the first lap and the number of laps, the lap time of each lap, for a driver or the average car, flagged when the tyre is older or newer than any lap the race calibrated. Holding out each driver's last stint of at least 10 clean laps and predicting it from the rest of the race, the mean error per lap is 0.46 s in the median and 0.80 s at the 90th percentile on dry tyres over the 2024 season.
+- Not calibrated yet, and said so: starting fuel, wind, driver aggressiveness, full wet tyres and Sprints. Track temperature is recorded per race, not fitted.
+
+The simulator screen and the assistant do not exist yet.
 
 ## Run it locally
 
@@ -59,6 +65,14 @@ make transform YEAR=2026 # every ingested session that changed since its last lo
 ```
 
 A session whose raw data is still incomplete waits for the next run; a session whose data the schema does not describe fails alone, with one line naming the document and the row, and the run exits with code 1. Running it again loads only what changed (ADR 0008).
+
+Calibrate the lap-time model of every race of a transformed season:
+
+```sh
+make calibrate YEAR=2024 # each race whose clean rows or model changed, in a few seconds per season
+```
+
+A race whose clean laps cannot determine the model is recorded as not calibrated, with its reason; one whose race control the model does not describe fails alone, naming the message, and the run exits with code 1. A transform that reloads a race drops its calibration, and the next run computes it again (ADR 0014).
 
 ## Develop
 

@@ -199,11 +199,16 @@ def clean_database(database: str, postgres_server_uri: str, monkeypatch: pytest.
     return database
 
 
-def store_raw(mongo_uri: str, database: str, *, broken_lap: bool = False) -> None:
+def store_raw(
+    mongo_uri: str, database: str, *, broken_lap: bool = False, unknown_safety_car: bool = False
+) -> None:
     """The raw store after ingesting 2024, holding the two sampled Bahrain sessions."""
     race, qualifying = sample(RACE), sample(QUALIFYING)
     if broken_lap:
         race.rows[Endpoint.LAPS][0]["lap_number"] = "1"
+    if unknown_safety_car:
+        message = {**race.rows[Endpoint.RACE_CONTROL][0], "category": "SafetyCar"}
+        race.rows[Endpoint.RACE_CONTROL][0] = {**message, "message": "SAFETY CAR STAYING OUT"}
     documents: list[tuple[RawRequest, list[JsonObject]]] = [
         (season_sessions_request(2024, CUTOFF_2024), [race.session, qualifying.session]),
         (meetings_request(2024, CUTOFF_2024), [race.meeting]),
@@ -261,4 +266,52 @@ def test_transform_of_a_season_not_ingested_exits_1(capsys: pytest.CaptureFixtur
     assert capsys.readouterr().err == (
         f"transform failed: {season_sessions_request(2024, CUTOFF_2024).key} is not stored; "
         "ingest the season with the same clock first\n"
+    )
+
+
+def test_calibrate_fits_the_transformed_races_then_finds_nothing_to_do(
+    mongo_uri: str, clean_database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store_raw(mongo_uri, clean_database)
+    run(["transform", "--year", "2024"])
+    capsys.readouterr()
+
+    exit_codes = [run(["calibrate", "--year", "2024"]), run(["calibrate", "--year", "2024"])]
+
+    assert exit_codes == [0, 0]
+    assert capsys.readouterr().out.splitlines() == [
+        "calibrated 1 races: 0 calibrated, 1 not_calibrated, 0 unchanged, 0 still_failing, "
+        "0 failed, 0 gone",
+        "calibrated 1 races: 0 calibrated, 0 not_calibrated, 1 unchanged, 0 still_failing, "
+        "0 failed, 0 gone",
+    ]
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_calibrate_of_a_season_not_transformed_exits_1(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = run(["calibrate", "--year", "2024"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().err == (
+        "calibration failed: no race of 2024 is in the clean model; run the transform first\n"
+    )
+
+
+def test_calibrate_exits_1_naming_each_failed_race(
+    mongo_uri: str, clean_database: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store_raw(mongo_uri, clean_database, unknown_safety_car=True)
+    run(["transform", "--year", "2024"])
+    capsys.readouterr()
+
+    exit_code = run(["calibrate", "--year", "2024"])
+
+    output = capsys.readouterr()
+    assert exit_code == 1
+    assert output.out == (
+        "calibrated 1 races: 0 calibrated, 0 not_calibrated, 0 unchanged, 0 still_failing, "
+        "1 failed, 0 gone\n"
+    )
+    assert output.err == (
+        "race 9472 failed: race_control seq 0: safety car message 'SAFETY CAR STAYING OUT'\n"
     )
