@@ -131,6 +131,7 @@ source_paths = ["src/f1_strategy/domain/"]
 also_copy = ["src/f1_strategy/application/"]
 pytest_add_cli_args = ["--no-cov", "-p", "no:cacheprovider"]
 pytest_add_cli_args_test_selection = [
+    "tests/test_calibration.py",
     "tests/test_domain_clean.py",
     "tests/test_domain_clean_laps.py",
     "tests/test_domain_golden_races.py",
