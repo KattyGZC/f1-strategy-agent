@@ -8,7 +8,7 @@ from psycopg.errors import CheckViolation
 from f1_strategy.adapters.migrate import main, upgrade
 from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
 
-HEAD = "0002"
+HEAD = "0003"
 NOW = datetime(2026, 10, 27, 12, tzinfo=UTC)
 LOADED = {
     "loaded_fingerprint": "in-1",
