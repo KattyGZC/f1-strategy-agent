@@ -4,7 +4,11 @@ import sys
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from datetime import UTC, datetime, timedelta
 
-from f1_strategy.adapters.clean_store import PostgresCleanStore, connection_pool
+from f1_strategy.adapters.clean_store import (
+    PostgresCalibrationStore,
+    PostgresCleanStore,
+    connection_pool,
+)
 from f1_strategy.adapters.openf1 import (
     HttpTransport,
     OpenF1Client,
@@ -15,6 +19,12 @@ from f1_strategy.adapters.openf1 import (
 from f1_strategy.adapters.rate_limit import RateLimit, SlidingWindowRateLimiter
 from f1_strategy.adapters.raw_store import MongoClient, MongoRawStore, mongo_client
 from f1_strategy.adapters.settings import Settings
+from f1_strategy.application.calibration import (
+    CalibrateSeason,
+    CalibrationOutcome,
+    CalibrationReport,
+    SeasonNotTransformedError,
+)
 from f1_strategy.application.ingestion import (
     IngestionReport,
     IngestLatestGrandPrixTelemetry,
@@ -45,6 +55,7 @@ EXPECTED_FAILURES = (
     SessionNotFoundError,
     SessionNotSettledError,
     SeasonNotIngestedError,
+    SeasonNotTransformedError,
     CleanDataError,
 )
 
@@ -82,7 +93,8 @@ def main(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="f1-strategy", description="Ingest raw OpenF1 data and load it into the clean model"
+        prog="f1-strategy",
+        description="Ingest raw OpenF1 data, load it into the clean model and calibrate the races",
     )
     commands = parser.add_subparsers(required=True)
     season = commands.add_parser("season", help="ingest every settled session of a season")
@@ -99,6 +111,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     _season_arguments(transform)
     transform.set_defaults(command=_transform, failure="transform")
+    calibrate = commands.add_parser(
+        "calibrate", help="calibrate the lap-time model of each race of a transformed season"
+    )
+    calibrate.add_argument("--year", type=int, required=True)
+    calibrate.set_defaults(command=_calibrate, failure="calibration")
     return parser
 
 
@@ -163,6 +180,25 @@ async def _transform(
     return 1 if report.failures else 0
 
 
+async def _calibrate(
+    args: argparse.Namespace,
+    settings: Settings,
+    _transport: HttpTransport | None,
+    clock: Clock,
+) -> int:
+    pool = connection_pool(
+        settings.postgres_uri.get_secret_value(),
+        max_size=1,
+        connect_timeout_s=settings.postgres_connect_timeout_s,
+    )
+    async with pool:
+        report = await CalibrateSeason(PostgresCalibrationStore(pool))(args.year, clock())
+    print(_calibration_summary(report))
+    for failure in report.failures:
+        print(f"race {failure.session_key} failed: {failure.error}", file=sys.stderr)
+    return 1 if report.failures else 0
+
+
 def _mongo(settings: Settings) -> MongoClient:
     return mongo_client(settings.mongo_uri.get_secret_value())
 
@@ -221,6 +257,11 @@ def _source(http: OpenF1Http, settings: Settings, clock: Clock) -> OpenF1Client:
 def _transform_summary(report: TransformReport) -> str:
     counts = ", ".join(f"{report.count(outcome)} {outcome}" for outcome in Outcome)
     return f"transformed {len(report.outcomes)} sessions: {counts}"
+
+
+def _calibration_summary(report: CalibrationReport) -> str:
+    counts = ", ".join(f"{report.count(outcome)} {outcome}" for outcome in CalibrationOutcome)
+    return f"calibrated {len(report.outcomes)} races: {counts}"
 
 
 def _summary(report: IngestionReport) -> str:
