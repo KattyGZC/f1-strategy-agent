@@ -29,7 +29,13 @@ Fase 3, el replay:
 - **Las sesiones cargadas**: `GET /api/sessions` lista todas las sesiones del modelo limpio con su Gran Premio, la más reciente primero, y `GET /api/sessions/{session_key}` añade sus pilotos con su equipo y su color, y su última vuelta.
 - **La pantalla del replay** en http://localhost:8080: elige un Gran Premio, una de sus sesiones y una velocidad, y mírala tal como ocurrió: la vuelta del líder y la última bandera de toda la pista, la timing tower (posición, intervalo o gap al líder, última vuelta, neumático y su edad, última parada), la última vuelta del piloto que sigues con sus sectores y trampas de velocidad, el clima y el control de carrera. Pausa, reanuda y cambia la velocidad mientras se reproduce, o escribe una vuelta y ve a ella: la pantalla se rehace como estaba al inicio de esa vuelta y sigue; elegir otra sesión detiene el replay que dejas. El mapa del circuito y las herramientas de estrategia tienen su lugar en la pantalla, pero aún no están construidos. Cada número de la pantalla llegó en un evento: la pantalla guarda el último valor de cada uno y todos los mensajes de control de carrera.
 
-El simulador y el asistente todavía no existen.
+Fase 4, el motor predictivo:
+
+- **Un modelo de tiempo por vuelta por carrera**, calibrado con sus vueltas limpias: por compuesto, un tiempo base y una degradación por vuelta de edad del neumático; una pendiente por vuelta de carrera compartida por los compuestos de seco (el combustible que se quema y la pista que mejora juntos, porque no hay datos de combustible) y otra para los intermedios (la pista se seca mientras ruedan), y el ritmo de cada piloto frente al coche promedio. Una vuelta cuenta solo si nada más explica su tiempo: se dejan fuera la vuelta 1, las vueltas de boxes, los periodos de safety car, virtual safety car y bandera roja y la vuelta siguiente, las vueltas con lisos bajo la lluvia y los 20 minutos después, y las vueltas anómalas, cada una con su motivo ([ADR 0014](docs/adr/0014-per-race-linear-lap-time-model.md)).
+- **Predicción de un stint**: dado un compuesto, la edad del neumático, la primera vuelta y el número de vueltas, el tiempo de cada vuelta, para un piloto o para el coche promedio, marcado cuando el neumático es más viejo o más nuevo que cualquier vuelta calibrada de esa carrera. Dejando fuera el último stint de al menos 10 vueltas limpias de cada piloto y prediciéndolo con el resto de la carrera, el error medio por vuelta es 0,46 s en la mediana y 0,80 s en el percentil 90 con neumáticos de seco en la temporada 2024.
+- Todavía sin calibrar, y se dice: combustible inicial, viento, agresividad del piloto, neumáticos de lluvia extrema y sprints. La temperatura de pista se registra por carrera, no se ajusta.
+
+La pantalla del simulador y el asistente todavía no existen.
 
 ## Ejecutarlo en local
 
@@ -59,6 +65,14 @@ make transform YEAR=2026 # cada sesión ingerida que cambió desde su última ca
 ```
 
 Una sesión cuyos datos crudos aún están incompletos espera a la siguiente ejecución; una sesión con datos que el esquema no describe falla sola, con una línea que dice el documento y la fila, y la ejecución termina con código 1. Volver a lanzarlo carga solo lo que cambió (ADR 0008).
+
+Calibra el modelo de tiempo por vuelta de cada carrera de una temporada ya transformada:
+
+```sh
+make calibrate YEAR=2024 # cada carrera cuyas filas limpias o cuyo modelo cambiaron, en unos segundos por temporada
+```
+
+Una carrera cuyas vueltas limpias no alcanzan para determinar el modelo queda registrada como no calibrada, con su motivo; una cuyo control de carrera el modelo no describe falla sola, diciendo el mensaje, y la ejecución termina con código 1. Un transform que vuelve a cargar una carrera borra su calibración, y la siguiente ejecución la calcula de nuevo (ADR 0014).
 
 ## Desarrollo
 
