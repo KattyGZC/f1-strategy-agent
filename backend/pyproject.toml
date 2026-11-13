@@ -132,6 +132,7 @@ also_copy = ["src/f1_strategy/application/"]
 pytest_add_cli_args = ["--no-cov", "-p", "no:cacheprovider"]
 pytest_add_cli_args_test_selection = [
     "tests/test_domain_clean.py",
+    "tests/test_domain_least_squares.py",
     "tests/test_domain_openf1.py",
     "tests/test_domain_playback.py",
     "tests/test_domain_replay.py",
