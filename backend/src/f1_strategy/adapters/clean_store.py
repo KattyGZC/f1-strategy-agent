@@ -1,5 +1,6 @@
-"""The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), and
-the read of a session's rows for its replay (ADR 0009), and the catalog of loaded sessions."""
+"""The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), the
+read of a session's rows for its replay (ADR 0009), the catalog of loaded sessions, and each
+race's calibration (ADR 0014)."""
 
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
@@ -12,6 +13,15 @@ from psycopg.rows import TupleRow, class_row
 from psycopg.types.enum import EnumInfo, register_enum
 from psycopg_pool import AsyncConnectionPool
 
+from f1_strategy.application.calibration import (
+    CalibrationFailed,
+    CalibrationResult,
+    CalibrationStatus,
+    Fingerprint,
+    Race,
+    RaceSnapshot,
+    StoredCalibration,
+)
 from f1_strategy.application.sessions import LoadedSession, SessionDriver, SessionEntry
 from f1_strategy.application.transform import (
     ErrorKind,
@@ -38,6 +48,13 @@ from f1_strategy.domain.clean import (
     Weather,
     column_names,
 )
+from f1_strategy.domain.clean_laps import ExclusionReason
+from f1_strategy.domain.lap_time_model import (
+    Calibration,
+    Exclusion,
+    NotCalibrated,
+    NotCalibratedReason,
+)
 from f1_strategy.domain.openf1 import SessionName, SessionType
 
 type Pool = AsyncConnectionPool[AsyncConnection[TupleRow]]
@@ -52,6 +69,13 @@ REPLAYED_ENUM_TYPES: EnumTypes = (
     ("flag_scope", FlagScope),
 )
 CATALOG_ENUM_TYPES: EnumTypes = (("session_type", SessionType), ("session_name", SessionName))
+# The database enum type of each closed set the calibration tables hold (migration 0003).
+CALIBRATION_ENUM_TYPES: EnumTypes = (
+    ("compound", Compound),
+    ("calibration_status", CalibrationStatus),
+    ("not_calibrated_reason", NotCalibratedReason),
+    ("exclusion_reason", ExclusionReason),
+)
 
 SESSION_SELECT = """
     SELECT s.session_key, s.session_type, s.session_name, s.date_start, m.meeting_key, m.year,
@@ -65,6 +89,44 @@ DRIVERS_QUERY = """
     FROM driver_session WHERE session_key = %s ORDER BY driver_number
 """
 LAST_LAP_QUERY = "SELECT max(lap_number) FROM lap WHERE session_key = %s"
+
+RACES_QUERY = """
+    SELECT s.session_key, r.loaded_output_hash
+    FROM session s JOIN meeting m USING (meeting_key) JOIN transform_run r USING (session_key)
+    WHERE m.year = %s AND s.session_name = %s ORDER BY s.session_key
+"""
+RACE_HASH_QUERY = "SELECT loaded_output_hash FROM transform_run WHERE session_key = %s"
+STORED_CALIBRATIONS_QUERY = """
+    SELECT session_key, status, clean_output_hash, calibration_version
+    FROM calibration_run WHERE session_key = ANY(%s)
+"""
+SAVE_RUN = """
+    INSERT INTO calibration_run AS run (session_key, status, clean_output_hash,
+        calibration_version, not_calibrated_reason, error_message, calibrated_at)
+    VALUES (%(session_key)s, %(status)s, %(hash)s, %(version)s, %(reason)s, %(error)s, %(now)s)
+    ON CONFLICT (session_key) DO UPDATE SET
+        status = EXCLUDED.status,
+        clean_output_hash = EXCLUDED.clean_output_hash,
+        calibration_version = EXCLUDED.calibration_version,
+        not_calibrated_reason = EXCLUDED.not_calibrated_reason,
+        error_message = EXCLUDED.error_message,
+        calibrated_at = EXCLUDED.calibrated_at
+"""
+SAVE_CALIBRATION = """
+    INSERT INTO calibration (session_key, race_laps, residual_rmse_s, track_temperature_min_c,
+        track_temperature_median_c, track_temperature_max_c)
+    VALUES (%s, %s, %s, %s, %s, %s)
+"""
+SAVE_COMPOUND = """
+    INSERT INTO calibration_compound (session_key, compound, base_s, degradation_s_per_lap,
+        progress_s_per_lap, residual_rmse_s, clean_laps, min_tyre_age_laps, max_tyre_age_laps)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+SAVE_DRIVER = """
+    INSERT INTO calibration_driver (session_key, driver_number, pace_offset_s, clean_laps)
+    VALUES (%s, %s, %s, %s)
+"""
+SAVE_EXCLUSION = "INSERT INTO calibration_exclusion (session_key, reason, laps) VALUES (%s, %s, %s)"
 
 RUN_COLUMNS = (
     "status, input_fingerprint, transform_version, error_kind, loaded_fingerprint, loaded_version"
@@ -328,6 +390,129 @@ class PostgresSessionCatalog:
                 await cursor.execute(DRIVERS_QUERY, [session_key])
                 drivers = tuple(await cursor.fetchall())
             return SessionEntry(session, drivers, await _last_lap_number(connection, session_key))
+
+
+@dataclass(frozen=True)
+class RaceRows:
+    laps: tuple[Lap, ...]
+    stints: tuple[Stint, ...]
+    pits: tuple[Pit, ...]
+    race_control: tuple[RaceControl, ...]
+    weather: tuple[Weather, ...]
+
+
+class PostgresCalibrationStore:
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def races(self, year: int) -> tuple[Race, ...]:
+        async with self._pool.connection() as connection:
+            await _register_enums(connection, CATALOG_ENUM_TYPES)
+            cursor = await connection.execute(RACES_QUERY, [year, SessionName.GRAND_PRIX])
+            return tuple(Race(int(key), str(digest)) for key, digest in await cursor.fetchall())
+
+    async def stored(self, session_keys: Collection[int]) -> dict[int, StoredCalibration]:
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(STORED_CALIBRATIONS_QUERY, [list(session_keys)])
+            return {
+                int(key): StoredCalibration(
+                    CalibrationStatus(str(status)), Fingerprint(str(digest), str(version))
+                )
+                for key, status, digest, version in await cursor.fetchall()
+            }
+
+    async def snapshot(self, session_key: int) -> RaceSnapshot | None:
+        """The race's rows and its transform's output hash from one snapshot, so the hash
+        recorded with a calibration is the one of the rows it was fitted on."""
+        async with self._pool.connection() as connection, connection.transaction():
+            await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            cursor = await connection.execute(RACE_HASH_QUERY, [session_key])
+            row = await cursor.fetchone()
+            if row is None or not await _is_loaded(connection, session_key):
+                return None
+            await _register_enums(connection, REPLAYED_ENUM_TYPES)
+            read = _SessionReader(connection, session_key)
+            rows = RaceRows(
+                laps=await read(Lap, "lap", ("driver_number", "lap_number")),
+                stints=await read(Stint, "stint", ("driver_number", "stint_number")),
+                pits=await read(Pit, "pit", ("driver_number", "lap_number")),
+                race_control=await read(RaceControl, "race_control", ("seq",)),
+                weather=await read(Weather, "weather", ("date",)),
+            )
+            return RaceSnapshot(rows, str(row[0]))
+
+    async def save(
+        self, session_key: int, fingerprint: Fingerprint, result: CalibrationResult, now: datetime
+    ) -> None:
+        """The run row is written first: its lock makes a concurrent save of the same race
+        wait, then replace this one whole."""
+        async with self._pool.connection() as connection, connection.transaction():
+            await _register_enums(connection, CALIBRATION_ENUM_TYPES)
+            await connection.execute(SAVE_RUN, _run_row(session_key, fingerprint, result, now))
+            for table in ("calibration", "calibration_exclusion"):
+                await connection.execute(
+                    sql.SQL("DELETE FROM {} WHERE session_key = %s").format(sql.Identifier(table)),
+                    [session_key],
+                )
+            if isinstance(result, Calibration):
+                await _insert_calibration(connection, session_key, result)
+            if not isinstance(result, CalibrationFailed):
+                await _insert_exclusions(connection, session_key, result.exclusions)
+
+
+def _run_row(
+    session_key: int, fingerprint: Fingerprint, result: CalibrationResult, now: datetime
+) -> dict[str, object]:
+    reason = result.reason if isinstance(result, NotCalibrated) else None
+    error = result.message if isinstance(result, CalibrationFailed) else None
+    return {
+        "session_key": session_key,
+        "status": _status(result),
+        "hash": fingerprint.clean_output_hash,
+        "version": fingerprint.calibration_version,
+        "reason": reason,
+        "error": error,
+        "now": now,
+    }
+
+
+def _status(result: CalibrationResult) -> CalibrationStatus:
+    if isinstance(result, Calibration):
+        return CalibrationStatus.CALIBRATED
+    if isinstance(result, NotCalibrated):
+        return CalibrationStatus.NOT_CALIBRATED
+    return CalibrationStatus.FAILED
+
+
+async def _insert_calibration(
+    connection: AsyncConnection[TupleRow], session_key: int, calibration: Calibration
+) -> None:
+    temperature = calibration.track_temperature
+    await connection.execute(
+        SAVE_CALIBRATION,
+        [
+            session_key,
+            calibration.race_laps,
+            calibration.residual_rmse_s,
+            *((None, None, None) if temperature is None else astuple(temperature)),
+        ],
+    )
+    async with connection.cursor() as cursor:
+        await cursor.executemany(
+            SAVE_COMPOUND, [(session_key, *astuple(fit)) for fit in calibration.compounds]
+        )
+        await cursor.executemany(
+            SAVE_DRIVER, [(session_key, *astuple(driver)) for driver in calibration.drivers]
+        )
+
+
+async def _insert_exclusions(
+    connection: AsyncConnection[TupleRow], session_key: int, exclusions: tuple[Exclusion, ...]
+) -> None:
+    async with connection.cursor() as cursor:
+        await cursor.executemany(
+            SAVE_EXCLUSION, [(session_key, *astuple(exclusion)) for exclusion in exclusions]
+        )
 
 
 async def _last_lap_number(connection: AsyncConnection[TupleRow], session_key: int) -> int | None:
