@@ -20,6 +20,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-11-10 | [01. A viewer stops their replay](2026-11-10-01-stop-replay.md) |
 | 2026-11-10 | [02. Seek to a lap](2026-11-10-02-seek-to-a-lap.md) |
 | 2026-11-12 | [01. Compact a seek's catch-up](2026-11-12-01-compact-seek-catch-up.md) |
+| 2026-11-12 | [02. Phase 4 predictive engine](2026-11-12-02-phase-4-predictive-engine.md) |
 
 ## Template
 
