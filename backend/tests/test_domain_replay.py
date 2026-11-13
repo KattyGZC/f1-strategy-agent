@@ -180,27 +180,6 @@ def test_a_lap_carries_its_stint_tyre_and_age() -> None:
     assert only_lap(rows) == LapCompleted(lap(1, 7), Compound.MEDIUM, 5)
 
 
-@pytest.mark.parametrize("stint_order", [(0, 1), (1, 0)])
-def test_a_shared_boundary_lap_belongs_to_the_new_stint(stint_order: tuple[int, int]) -> None:
-    stints = [stint(1, 1, (1, 15)), stint(1, 2, (15, 40), compound=Compound.HARD)]
-    rows = Rows(laps=[lap(1, 15)], stints=[stints[index] for index in stint_order])
-
-    assert only_lap(rows) == LapCompleted(lap(1, 15), Compound.HARD, 0)
-
-
-def test_the_last_lap_of_a_stint_carries_its_tyre() -> None:
-    rows = Rows(laps=[lap(1, 10)], stints=[stint(1, 1, (1, 10), tyre_age_at_start=2)])
-
-    assert only_lap(rows) == LapCompleted(lap(1, 10), Compound.SOFT, 11)
-
-
-def test_a_newer_stint_without_a_start_leaves_the_lap_to_an_older_one() -> None:
-    no_start = Stint(SESSION, 1, 2, Compound.HARD, None, 5, 0)
-    rows = Rows(laps=[lap(1, 3)], stints=[stint(1, 1, (1, 10), compound=Compound.MEDIUM), no_start])
-
-    assert only_lap(rows) == LapCompleted(lap(1, 3), Compound.MEDIUM, 2)
-
-
 def test_a_lap_no_stint_covers_has_no_tyre() -> None:
     rows = Rows(
         laps=[lap(1, 21)],

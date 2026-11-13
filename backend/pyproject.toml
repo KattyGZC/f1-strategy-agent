@@ -136,6 +136,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_domain_playback.py",
     "tests/test_domain_replay.py",
     "tests/test_domain_retry.py",
+    "tests/test_domain_tyres.py",
     "tests/test_ingestion.py",
     "tests/test_replay.py",
     "tests/test_transform.py",

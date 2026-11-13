@@ -4,7 +4,6 @@ Every function here is pure. The same rows give the same events in the same orde
 replay's content never depends on how fast or when it is played.
 """
 
-from collections import defaultdict
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -24,6 +23,7 @@ from f1_strategy.domain.clean import (
     TeamRadio,
     Weather,
 )
+from f1_strategy.domain.tyres import Tyre, TyreLookup
 
 MICROSECONDS_PER_S = 1_000_000
 
@@ -173,17 +173,13 @@ def _lap_starts(laps: Sequence[Lap]) -> dict[int, datetime]:
 
 
 def _laps_completed(laps: Sequence[Lap], stints: Sequence[Stint]) -> list[Event]:
-    # Newest stint first: consecutive stints share their boundary lap (ADR 0008), and the lap
-    # belongs to the stint that starts on it.
-    newest_first: defaultdict[int, list[Stint]] = defaultdict(list)
-    for stint in sorted(stints, key=lambda stint: stint.stint_number, reverse=True):
-        newest_first[stint.driver_number].append(stint)
+    tyres = TyreLookup(stints)
     events = []
     for lap in laps:
         if lap.date_start is None or lap.lap_duration is None:
             continue
         ended_at = lap.date_start + _duration(lap.lap_duration)
-        events.append(Event(ended_at, _with_tyre(lap, newest_first[lap.driver_number])))
+        events.append(Event(ended_at, _completed(lap, tyres.tyre_on(lap))))
     return events
 
 
@@ -193,14 +189,10 @@ def _duration(seconds: Decimal) -> timedelta:
     return timedelta(microseconds=int(seconds * MICROSECONDS_PER_S))
 
 
-def _with_tyre(lap: Lap, newest_first: Sequence[Stint]) -> LapCompleted:
-    for stint in newest_first:
-        if stint.lap_start is None or stint.lap_end is None:
-            continue
-        if stint.lap_start <= lap.lap_number <= stint.lap_end:
-            tyre_age_laps = stint.tyre_age_at_start + lap.lap_number - stint.lap_start
-            return LapCompleted(lap, stint.compound, tyre_age_laps)
-    return LapCompleted(lap, None, None)
+def _completed(lap: Lap, tyre: Tyre | None) -> LapCompleted:
+    if tyre is None:
+        return LapCompleted(lap, None, None)
+    return LapCompleted(lap, tyre.compound, tyre.age_laps)
 
 
 def _order(event: Event) -> tuple[datetime, int, tuple[int, ...]]:
