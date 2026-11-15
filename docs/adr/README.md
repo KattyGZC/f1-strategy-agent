@@ -18,6 +18,7 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0012](0012-seek-to-a-lap.md) | A seek replaces the replay's stream with a new generation | Accepted; seek catch-up superseded by 0013 |
 | [0013](0013-a-seek-sends-what-is-still-current.md) | A seek sends at once only the events still current at its lap | Accepted |
 | [0014](0014-per-race-linear-lap-time-model.md) | Lap time is a per-race linear model calibrated on clean laps | Accepted |
+| [0015](0015-pit-loss-from-neighbouring-laps.md) | Pit loss is measured per race against the driver's neighbouring laps | Accepted |
 
 ## Template
 
