@@ -29,9 +29,10 @@ from f1_strategy.domain.clean_laps import (
     lap_verdicts,
 )
 from f1_strategy.domain.least_squares import SingularSystemError, least_squares
+from f1_strategy.domain.pit_loss import PitLoss, PitStopExclusion, measure_pit_loss
 
 # Raise whenever the calibration of the same clean rows changes, thresholds included.
-CALIBRATION_VERSION = "1"
+CALIBRATION_VERSION = "2"
 
 COEFFICIENT_DECIMALS = 6
 COEFFICIENT_SCALE = 10**COEFFICIENT_DECIMALS
@@ -99,6 +100,8 @@ class Calibration:
     residual_rmse_s: Decimal
     exclusions: tuple[Exclusion, ...]
     track_temperature: TrackTemperature | None
+    pit_loss: PitLoss | None
+    pit_stop_exclusions: tuple[PitStopExclusion, ...]
 
 
 @dataclass(frozen=True)
@@ -271,6 +274,7 @@ def _calibration(
         DriverPace(driver, _decimal(level[driver] - mean_level), count)
         for driver, count in sorted(Counter(lap.lap.driver_number for lap in clean).items())
     )
+    pit_loss = measure_pit_loss(rows)
     return Calibration(
         race_laps=max(lap.lap_number for lap in rows.laps),
         compounds=fits,
@@ -278,6 +282,8 @@ def _calibration(
         residual_rmse_s=_rmse(residuals),
         exclusions=exclusions,
         track_temperature=_track_temperature(clean, rows.weather),
+        pit_loss=pit_loss.pit_loss,
+        pit_stop_exclusions=pit_loss.exclusions,
     )
 
 

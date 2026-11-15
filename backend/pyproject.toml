@@ -138,6 +138,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_domain_lap_time_model.py",
     "tests/test_domain_least_squares.py",
     "tests/test_domain_openf1.py",
+    "tests/test_domain_pit_loss.py",
     "tests/test_domain_playback.py",
     "tests/test_domain_replay.py",
     "tests/test_domain_retry.py",

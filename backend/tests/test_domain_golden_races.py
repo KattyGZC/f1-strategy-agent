@@ -1,4 +1,4 @@
-"""Golden cases from 2024 races (ADR 0014).
+"""Golden cases from 2024 races (ADR 0014, ADR 0015).
 
 Each case is a race winner's last stint with at least 10 clean laps: the race is calibrated
 without that stint's laps, the stint is predicted with the winner's pace, and the mean
@@ -22,6 +22,7 @@ from f1_strategy.domain.lap_time_model import (
     calibrate,
     predict_stint,
 )
+from f1_strategy.domain.pit_loss import PitLoss
 from tests.calibration_races import BAHRAIN, BRITAIN, CANADA, SPAIN, race
 
 DRY_MAE_TOLERANCE_S = Decimal("0.8")
@@ -91,6 +92,7 @@ def test_a_held_out_stint_is_predicted_within_the_tolerance(case: Golden) -> Non
 # CALIBRATION_VERSION fails here.
 GOLDEN_HASHES = {
     "1": "f05f4368aaef22bc4bf1328ad9711495b5cd76e8ec442274a6e56a44f9f07e05",
+    "2": "c5760b805285a9546d7a8c8f44f48de241cf9c88056e14c54a33716a494159e6",
 }
 
 
@@ -100,3 +102,23 @@ def test_the_golden_races_pin_the_calibration_version() -> None:
         digest.update(repr(calibrate(race(session_key))).encode())
 
     assert GOLDEN_HASHES[CALIBRATION_VERSION] == digest.hexdigest()
+
+
+# Each race's pit loss as measured over the local 2024 database (scratch script, 2026-11-15),
+# where the same rule kept 603 of the season's 825 stops.
+GOLDEN_PIT_LOSSES = {
+    BAHRAIN: PitLoss(Decimal("24.343"), 42),
+    CANADA: PitLoss(Decimal("24.448"), 21),
+    SPAIN: PitLoss(Decimal("22.793"), 42),
+    BRITAIN: PitLoss(Decimal("24.837"), 43),
+}
+
+
+@pytest.mark.parametrize(("session_key", "pit_loss"), GOLDEN_PIT_LOSSES.items())
+def test_a_race_pit_loss_is_the_one_measured_on_the_season(
+    session_key: int, pit_loss: PitLoss
+) -> None:
+    calibration = calibrate(race(session_key))
+
+    assert isinstance(calibration, Calibration)
+    assert calibration.pit_loss == pit_loss

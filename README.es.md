@@ -35,6 +35,10 @@ Fase 4, el motor predictivo:
 - **Predicción de un stint**: dado un compuesto, la edad del neumático, la primera vuelta y el número de vueltas, el tiempo de cada vuelta, para un piloto o para el coche promedio, marcado cuando el neumático es más viejo o más nuevo que cualquier vuelta calibrada de esa carrera. Dejando fuera el último stint de al menos 10 vueltas limpias de cada piloto y prediciéndolo con el resto de la carrera, el error medio por vuelta es 0,46 s en la mediana y 0,80 s en el percentil 90 con neumáticos de seco en la temporada 2024.
 - Todavía sin calibrar, y se dice: combustible inicial, viento, agresividad del piloto, neumáticos de lluvia extrema y sprints. La temperatura de pista se registra por carrera, no se ajusta.
 
+Fase 5, el simulador, en curso:
+
+- **La pérdida en pit de cada carrera**, medida con sus propias paradas: una parada cuesta su vuelta de entrada y su vuelta de salida frente a la vuelta anterior y la posterior del mismo piloto, y el valor de la carrera es la mediana de sus paradas útiles (de 19,2 s en Spa a 29,5 s en Singapur en 2024). La lluvia no excluye una parada, porque las vueltas de alrededor tienen la misma lluvia; sí la excluyen el safety car, el virtual safety car o la bandera roja, otra parada al lado o estar justo después de la vuelta 1, cada una con su motivo. Una carrera medida con menos de 5 paradas conserva su valor, marcado como poco fiable: Interlagos en 2024, con 1 ([ADR 0015](docs/adr/0015-pit-loss-from-neighbouring-laps.md)).
+
 La pantalla del simulador y el asistente todavía no existen.
 
 ## Ejecutarlo en local
@@ -72,7 +76,7 @@ Calibra el modelo de tiempo por vuelta de cada carrera de una temporada ya trans
 make calibrate YEAR=2024 # cada carrera cuyas filas limpias o cuyo modelo cambiaron, en unos segundos por temporada
 ```
 
-Una carrera cuyas vueltas limpias no alcanzan para determinar el modelo queda registrada como no calibrada, con su motivo; una cuyo control de carrera el modelo no describe falla sola, diciendo el mensaje, y la ejecución termina con código 1. Un transform que vuelve a cargar una carrera borra su calibración, y la siguiente ejecución la calcula de nuevo (ADR 0014).
+Una carrera cuyas vueltas limpias no alcanzan para determinar el modelo queda registrada como no calibrada, con su motivo; una cuyo control de carrera el modelo no describe falla sola, diciendo el mensaje, y la ejecución termina con código 1. Un transform que vuelve a cargar una carrera borra su calibración, y la siguiente ejecución la calcula de nuevo (ADR 0014). La calibración incluye también la pérdida en pit de la carrera; una calibración hecha antes de que existiera se calcula de nuevo en la siguiente ejecución (ADR 0015).
 
 ## Desarrollo
 

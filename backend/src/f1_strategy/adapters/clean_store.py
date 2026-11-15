@@ -1,6 +1,6 @@
 """The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), the
 read of a session's rows for its replay (ADR 0009), the catalog of loaded sessions, and each
-race's calibration (ADR 0014)."""
+race's calibration with its pit loss (ADR 0014, ADR 0015)."""
 
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
@@ -56,6 +56,7 @@ from f1_strategy.domain.lap_time_model import (
     NotCalibratedReason,
 )
 from f1_strategy.domain.openf1 import SessionName, SessionType
+from f1_strategy.domain.pit_loss import PitStopExclusionReason
 
 type Pool = AsyncConnectionPool[AsyncConnection[TupleRow]]
 
@@ -69,12 +70,13 @@ REPLAYED_ENUM_TYPES: EnumTypes = (
     ("flag_scope", FlagScope),
 )
 CATALOG_ENUM_TYPES: EnumTypes = (("session_type", SessionType), ("session_name", SessionName))
-# The database enum type of each closed set the calibration tables hold (migration 0003).
+# The database enum type of each closed set the calibration tables hold (migrations 0003, 0004).
 CALIBRATION_ENUM_TYPES: EnumTypes = (
     ("compound", Compound),
     ("calibration_status", CalibrationStatus),
     ("not_calibrated_reason", NotCalibratedReason),
     ("exclusion_reason", ExclusionReason),
+    ("pit_stop_exclusion_reason", PitStopExclusionReason),
 )
 
 SESSION_SELECT = """
@@ -127,6 +129,12 @@ SAVE_DRIVER = """
     VALUES (%s, %s, %s, %s)
 """
 SAVE_EXCLUSION = "INSERT INTO calibration_exclusion (session_key, reason, laps) VALUES (%s, %s, %s)"
+SAVE_PIT_LOSS = (
+    "INSERT INTO calibration_pit_loss (session_key, pit_loss_s, stops) VALUES (%s, %s, %s)"
+)
+SAVE_PIT_STOP_EXCLUSION = """
+    INSERT INTO calibration_pit_stop_exclusion (session_key, reason, stops) VALUES (%s, %s, %s)
+"""
 
 RUN_COLUMNS = (
     "status, input_fingerprint, transform_version, error_kind, loaded_fingerprint, loaded_version"
@@ -503,6 +511,12 @@ async def _insert_calibration(
         )
         await cursor.executemany(
             SAVE_DRIVER, [(session_key, *astuple(driver)) for driver in calibration.drivers]
+        )
+        if calibration.pit_loss is not None:
+            await cursor.execute(SAVE_PIT_LOSS, (session_key, *astuple(calibration.pit_loss)))
+        await cursor.executemany(
+            SAVE_PIT_STOP_EXCLUSION,
+            [(session_key, *astuple(exclusion)) for exclusion in calibration.pit_stop_exclusions],
         )
 
 

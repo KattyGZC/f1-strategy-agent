@@ -22,6 +22,7 @@ from f1_strategy.domain.lap_time_model import (
     calibrate,
     predict_stint,
 )
+from f1_strategy.domain.pit_loss import PitLoss
 from tests.replay_rows import Rows
 from tests.synthetic_race import (
     DRY,
@@ -30,6 +31,7 @@ from tests.synthetic_race import (
     Truth,
     lap,
     lap_start,
+    pit,
     stint,
     synthetic_race,
     weather,
@@ -57,7 +59,25 @@ def test_a_race_built_from_known_coefficients_gives_them_back() -> None:
         residual_rmse_s=Decimal(0),
         exclusions=FIRST_LAPS,
         track_temperature=TrackTemperature(Decimal(30), Decimal(30), Decimal(30)),
+        pit_loss=None,
+        pit_stop_exclusions=(),
     )  # fmt: skip
+
+
+def test_a_calibrated_race_carries_the_pit_loss_of_its_stops() -> None:
+    rows = synthetic_race()
+    rows.laps = [
+        replace(one, lap_duration=one.lap_duration + 10, is_pit_out_lap=one.lap_number == 31)
+        if one.driver_number == 1 and one.lap_number in {30, 31} and one.lap_duration is not None
+        else one
+        for one in rows.laps
+    ]
+    rows.pits.append(pit(1, 30))
+
+    calibration = calibrated(rows)
+
+    assert calibration.pit_loss == PitLoss(Decimal("20.060"), 1)
+    assert calibration.pit_stop_exclusions == ()
 
 
 WET = Truth(
