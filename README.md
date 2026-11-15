@@ -35,6 +35,10 @@ Phase 4, the predictive engine:
 - **Predictions of a stint**: given a compound, the tyre's age, the first lap and the number of laps, the lap time of each lap, for a driver or the average car, flagged when the tyre is older or newer than any lap the race calibrated. Holding out each driver's last stint of at least 10 clean laps and predicting it from the rest of the race, the mean error per lap is 0.46 s in the median and 0.80 s at the 90th percentile on dry tyres over the 2024 season.
 - Not calibrated yet, and said so: starting fuel, wind, driver aggressiveness, full wet tyres and Sprints. Track temperature is recorded per race, not fitted.
 
+Phase 5, the simulator, in progress:
+
+- **The pit loss of each race**, measured on its own stops: a stop costs its in-lap and out-lap over the driver's lap before and lap after, and the race's value is the median of its usable stops (19.2 s at Spa to 29.5 s in Singapore in 2024). Rain does not exclude a stop, since the laps around it run in the same rain; stops under a safety car, virtual safety car or red flag, next to another stop or right after lap 1 do, each with its reason. A race measured on fewer than 5 stops keeps its value, marked as not reliable: Interlagos in 2024, with 1 ([ADR 0015](docs/adr/0015-pit-loss-from-neighbouring-laps.md)).
+
 The simulator screen and the assistant do not exist yet.
 
 ## Run it locally
@@ -72,7 +76,7 @@ Calibrate the lap-time model of every race of a transformed season:
 make calibrate YEAR=2024 # each race whose clean rows or model changed, in a few seconds per season
 ```
 
-A race whose clean laps cannot determine the model is recorded as not calibrated, with its reason; one whose race control the model does not describe fails alone, naming the message, and the run exits with code 1. A transform that reloads a race drops its calibration, and the next run computes it again (ADR 0014).
+A race whose clean laps cannot determine the model is recorded as not calibrated, with its reason; one whose race control the model does not describe fails alone, naming the message, and the run exits with code 1. A transform that reloads a race drops its calibration, and the next run computes it again (ADR 0014). The calibration holds the race's pit loss too; a calibration made before it existed is computed again on the next run (ADR 0015).
 
 ## Develop
 
