@@ -121,7 +121,7 @@ def lap_verdicts(rows: RaceRows) -> tuple[LapVerdict, ...]:
     race = _Race(
         TyreLookup(rows.stints),
         frozenset((pit.driver_number, pit.lap_number) for pit in rows.pits),
-        frozenset(_key(lap) for lap in laps if _overlaps_any(lap, neutralisations)),
+        frozenset(_key(lap) for lap in laps if overlaps_any(lap, neutralisations)),
         rain_windows(rows.weather),
     )
     verdicts = [_on_its_own(lap, race) for lap in laps]
@@ -192,7 +192,7 @@ _RULES: tuple[tuple[ExclusionReason, _Rule], ...] = (
      lambda candidate, race: _previous(candidate.lap) in race.neutralised_laps),
     (ExclusionReason.WET_TRACK,
      lambda candidate, race: candidate.tyre.compound in DRY_COMPOUNDS
-     and _overlaps_any(candidate.lap, race.rain)),
+     and overlaps_any(candidate.lap, race.rain)),
 )  # fmt: skip
 
 
@@ -247,7 +247,7 @@ def _clean(verdicts: Iterable[LapVerdict]) -> list[CleanLap]:
     return [verdict for verdict in verdicts if isinstance(verdict, CleanLap)]
 
 
-def _overlaps_any(lap: Lap, windows: Sequence[Window]) -> bool:
+def overlaps_any(lap: Lap, windows: Sequence[Window]) -> bool:
     if lap.date_start is None or lap.lap_duration is None:
         return False
     start = lap.date_start
