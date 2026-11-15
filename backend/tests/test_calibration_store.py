@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import LiteralString
@@ -37,6 +38,7 @@ from f1_strategy.domain.lap_time_model import (
     NotCalibratedReason,
     TrackTemperature,
 )
+from f1_strategy.domain.pit_loss import PitLoss, PitStopExclusion, PitStopExclusionReason
 from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
 from tests.samples import QUALIFYING, RACE, sample
 
@@ -58,6 +60,11 @@ CALIBRATION = Calibration(
     residual_rmse_s=Decimal("0.453584"),
     exclusions=(Exclusion(ExclusionReason.FIRST_LAP, 20), Exclusion(ExclusionReason.OUTLIER, 3)),
     track_temperature=TrackTemperature(Decimal("21.9"), Decimal("22.8"), Decimal("23.9")),
+    pit_loss=PitLoss(Decimal("24.343"), 42),
+    pit_stop_exclusions=(
+        PitStopExclusion(PitStopExclusionReason.REFERENCE_IS_FIRST_LAP, 1),
+        PitStopExclusion(PitStopExclusionReason.NEUTRALISED, 14),
+    ),
 )  # fmt: skip
 NOT_CALIBRATED = NotCalibrated(
     NotCalibratedReason.NO_CLEAN_LAPS, (Exclusion(ExclusionReason.NO_DURATION, 2),)
@@ -154,16 +161,36 @@ async def test_a_saved_calibration_is_stored_whole(
     ]  # fmt: skip
     assert rows(postgres_uri, "SELECT reason::text, laps FROM calibration_exclusion "
                 "ORDER BY reason") == [("first_lap", 20), ("outlier", 3)]  # fmt: skip
+    assert rows(postgres_uri, "SELECT pit_loss_s, stops FROM calibration_pit_loss") == [
+        (Decimal("24.343"), 42)
+    ]
+    assert rows(postgres_uri, "SELECT reason::text, stops FROM calibration_pit_stop_exclusion "
+                "ORDER BY stops") == [
+        ("reference_is_first_lap", 1), ("neutralised", 14)
+    ]  # fmt: skip
+
+
+@pytest.mark.anyio
+async def test_a_race_without_a_usable_stop_keeps_its_calibration_and_no_pit_loss(
+    store: PostgresCalibrationStore, postgres_uri: str
+) -> None:
+    excluded = (PitStopExclusion(PitStopExclusionReason.NEUTRALISED, 3),)
+    calibration = replace(CALIBRATION, pit_loss=None, pit_stop_exclusions=excluded)
+
+    await store.save(RACE_KEY, FINGERPRINT, calibration, NOW)
+
+    assert rows(postgres_uri, "SELECT (SELECT count(*) FROM calibration), "
+                "(SELECT count(*) FROM calibration_pit_loss)") == [(1, 0)]  # fmt: skip
+    assert rows(postgres_uri, "SELECT reason::text, stops FROM calibration_pit_stop_exclusion") == [
+        ("neutralised", 3)
+    ]
 
 
 @pytest.mark.anyio
 async def test_a_race_without_a_track_temperature_is_stored(
     store: PostgresCalibrationStore, postgres_uri: str
 ) -> None:
-    calibration = Calibration(
-        CALIBRATION.race_laps, CALIBRATION.compounds, CALIBRATION.drivers,
-        CALIBRATION.residual_rmse_s, CALIBRATION.exclusions, track_temperature=None,
-    )  # fmt: skip
+    calibration = replace(CALIBRATION, track_temperature=None)
 
     await store.save(RACE_KEY, FINGERPRINT, calibration, NOW)
 
@@ -189,7 +216,9 @@ async def test_a_new_result_replaces_the_previous_calibration_whole(
     }
     assert rows(postgres_uri, "SELECT not_calibrated_reason::text, error_message "
                 "FROM calibration_run") == [("no_clean_laps", None)]  # fmt: skip
-    assert rows(postgres_uri, "SELECT count(*) FROM calibration") == [(0,)]
+    assert rows(postgres_uri, "SELECT (SELECT count(*) FROM calibration), "
+                "(SELECT count(*) FROM calibration_pit_loss), "
+                "(SELECT count(*) FROM calibration_pit_stop_exclusion)") == [(0, 0, 0)]  # fmt: skip
     assert rows(postgres_uri, "SELECT reason::text, laps FROM calibration_exclusion") == [
         ("no_duration", 2)
     ]
@@ -223,7 +252,8 @@ async def test_reloading_the_session_drops_its_calibration(
 
     assert await store.stored([RACE_KEY]) == {}
     assert rows(postgres_uri, "SELECT (SELECT count(*) FROM calibration_compound), "
-                "(SELECT count(*) FROM calibration_driver)") == [(0, 0)]  # fmt: skip
+                "(SELECT count(*) FROM calibration_driver), "
+                "(SELECT count(*) FROM calibration_pit_loss)") == [(0, 0, 0)]  # fmt: skip
 
 
 @pytest.mark.anyio
@@ -265,10 +295,7 @@ async def test_a_run_row_that_contradicts_its_status_is_rejected(
 @pytest.mark.anyio
 async def test_a_wet_compound_cannot_be_calibrated(store: PostgresCalibrationStore) -> None:
     wet = CompoundFit(Compound.WET, Decimal(120), Decimal(0), Decimal(0), Decimal(1), 10, 0, 9)
-    calibration = Calibration(
-        CALIBRATION.race_laps, (wet,), CALIBRATION.drivers, CALIBRATION.residual_rmse_s,
-        CALIBRATION.exclusions, CALIBRATION.track_temperature,
-    )  # fmt: skip
+    calibration = replace(CALIBRATION, compounds=(wet,))
 
     with pytest.raises(errors.CheckViolation) as rejected:
         await store.save(RACE_KEY, FINGERPRINT, calibration, NOW)
