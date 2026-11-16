@@ -38,6 +38,7 @@ Phase 4, the predictive engine:
 Phase 5, the simulator, in progress:
 
 - **The pit loss of each race**, measured on its own stops: a stop costs its in-lap and out-lap over the driver's lap before and lap after, and the race's value is the median of its usable stops (19.2 s at Spa to 29.5 s in Singapore in 2024). Rain does not exclude a stop, since the laps around it run in the same rain; stops under a safety car, virtual safety car or red flag, next to another stop or right after lap 1 do, each with its reason. A race measured on fewer than 5 stops keeps its value, marked as not reliable: Interlagos in 2024, with 1 ([ADR 0015](docs/adr/0015-pit-loss-from-neighbouring-laps.md)).
+- **Every request is traceable by one id**: each API response carries `X-Request-ID`, and the backend logs one JSON line per request (method, route template, status, error code, duration) and every other line under that id. Every error answers `{"detail", "code", "request_id"}`, with `code` from a closed list, and the screen shows the request id next to the error. An unexpected failure is logged once with its traceback and answers 500 without it. `GET /api/health/ready` checks PostgreSQL and Redis and answers 503 naming the one that does not answer; the stack's healthcheck uses it ([ADR 0016](docs/adr/0016-request-tracing-and-edge-limits.md)).
 
 The simulator screen and the assistant do not exist yet.
 
@@ -50,7 +51,7 @@ cp .env.example .env
 make up
 ```
 
-Open http://localhost:8080; the replay screen lists the sessions loaded with `make transform` (below). `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` and `TRANSFORM_*` lines from `.env.example`, and one copied before phase 3 the `POSTGRES_POOL_SIZE`, `REDIS_*` and `REPLAY_*` lines, `REPLAY_APPEND_BATCH` included.
+Open http://localhost:8080; the replay screen lists the sessions loaded with `make transform` (below). `make down` stops the stack. `make up` also brings the PostgreSQL schema to the latest migration; `make migrate` does only that. A `.env` copied before phase 2 needs the new `POSTGRES_CONNECT_TIMEOUT_S` and `TRANSFORM_*` lines from `.env.example`, and one copied before phase 3 the `POSTGRES_POOL_SIZE`, `REDIS_*` and `REPLAY_*` lines, `REPLAY_APPEND_BATCH` included; one copied before phase 5 needs `LOG_LEVEL` and `READINESS_TIMEOUT_S`.
 
 Ingest raw data while the stack is up:
 
