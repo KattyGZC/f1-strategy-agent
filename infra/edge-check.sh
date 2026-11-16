@@ -84,22 +84,23 @@ expect_security_headers "large body"
 
 i=0
 while [ "$i" -lt 150 ]; do
-  printf 'url = "%s/api/health"\noutput = "burst-%s"\n' "$base" "$i" >>"$work/burst"
+  [ "$i" -eq 0 ] || echo next >>"$work/burst"
+  printf 'url = "%s/api/health"\noutput = "burst-%s"\ndump-header = "burst-%s.headers"\n' \
+    "$base" "$i" "$i" >>"$work/burst"
+  printf 'silent\nwrite-out = "%%{http_code} %%{filename_effective}\\n"\n' >>"$work/burst"
   i=$((i + 1))
 done
 # Relative outputs, run from $work: a Windows curl does not map a POSIX path inside a config file.
-(cd "$work" && curl --silent --parallel --parallel-max 50 --config burst \
-  --write-out '%{http_code} %{filename_effective} %{content_type} %header{x-request-id}\n' \
-  >statuses)
-limited="$(grep '^429 ' "$work/statuses" | head -n 1)"
+(cd "$work" && curl --parallel --parallel-max 50 --config burst >statuses)
+limited="$(grep '^429 ' "$work/statuses" | head -n 1 | cut -d' ' -f2)"
 if [ -z "$limited" ]; then
   fail "burst: no request was rate limited"
 else
-  set -- $limited
-  echo "$3" | grep -q '^application/json' || fail "burst: 429 body is not JSON"
-  echo "$4" | grep -qE '^[0-9a-f]{32}$' || fail "burst: 429 X-Request-ID is not nginx's id"
-  grep -q '"code":"rate_limited"' "$work/$2" || fail "burst: 429 code is not rate_limited"
-  grep -q "\"request_id\":\"$4\"" "$work/$2" || fail "burst: 429 request_id is not the header's id"
+  cp "$work/$limited" "$work/body"
+  cp "$work/$limited.headers" "$work/headers"
+  expect_request_id "burst"
+  expect_error_body rate_limited "burst"
+  expect_security_headers "burst"
 fi
 
 if [ "$failures" -gt 0 ]; then
