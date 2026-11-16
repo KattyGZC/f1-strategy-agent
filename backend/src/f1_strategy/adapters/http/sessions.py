@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path
 from pydantic import AwareDatetime, BaseModel, Field
 
-from f1_strategy.adapters.http.responses import NOT_FOUND
+from f1_strategy.adapters.http.responses import INVALID, NOT_FOUND
 from f1_strategy.adapters.http.services import Services
 from f1_strategy.application.sessions import LoadedSession, SessionDriver
 from f1_strategy.domain.openf1 import SessionName, SessionType
@@ -46,7 +46,7 @@ async def list_sessions(services: Services) -> list[SessionResponse]:
     return [_session(session) for session in await services.list_sessions()]
 
 
-@router.get("/sessions/{session_key}", responses=NOT_FOUND)
+@router.get("/sessions/{session_key}", responses={**NOT_FOUND, **INVALID})
 async def read_session(session_key: SessionKey, services: Services) -> SessionEntryResponse:
     entry = await services.read_session(session_key)
     return SessionEntryResponse(

@@ -17,10 +17,11 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from redis.asyncio import BlockingConnectionPool, Redis
 from redis.asyncio.client import Pipeline
-from redis.exceptions import WatchError
+from redis.exceptions import RedisError, WatchError
 from redis.typing import EncodableT, FieldT
 
 from f1_strategy.adapters.replay_events import ReplayResetEvent, StreamSignal, wire_event
+from f1_strategy.application.readiness import DependencyUnavailableError
 from f1_strategy.application.replay import (
     AppendOutcome,
     ReplayReset,
@@ -175,6 +176,19 @@ def redis_client(uri: str, max_connections: int, timeout_s: float) -> Redis:
         uri, max_connections=max_connections, timeout=timeout_s, socket_connect_timeout=timeout_s
     )
     return Redis.from_pool(pool)
+
+
+class RedisPing:
+    """The readiness probe of the replay store (ADR 0016)."""
+
+    def __init__(self, redis: Redis) -> None:
+        self._redis = redis
+
+    async def __call__(self) -> None:
+        try:
+            await self._redis.ping()
+        except (RedisError, OSError) as error:
+            raise DependencyUnavailableError(type(error).__name__) from error
 
 
 class RedisReplayStore:

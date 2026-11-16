@@ -4,6 +4,7 @@ that minute and has not ended."""
 from dataclasses import replace
 from datetime import timedelta
 
+from httpx2 import Response
 from redis.asyncio import Redis
 
 from f1_strategy.adapters.clean_store import PostgresCleanStore, connection_pool
@@ -69,3 +70,8 @@ async def flush(redis_uri: str) -> None:
     client = Redis.from_url(redis_uri)
     await client.flushdb()
     await client.aclose()
+
+
+def error_body(response: Response, code: str, detail: str) -> dict[str, str]:
+    """The error the API answers, under the request id it returned."""
+    return {"detail": detail, "code": code, "request_id": response.headers["x-request-id"]}

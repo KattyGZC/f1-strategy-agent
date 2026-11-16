@@ -13,6 +13,21 @@
         "title": "Compound",
         "type": "string"
       },
+      "Dependency": {
+        "enum": [
+          "postgres",
+          "redis"
+        ],
+        "title": "Dependency",
+        "type": "string"
+      },
+      "DependencyState": {
+        "enum": [
+          "ok",
+          "failed"
+        ],
+        "type": "string"
+      },
       "DriverResponse": {
         "properties": {
           "driver_number": {
@@ -47,15 +62,42 @@
         "title": "DriverResponse",
         "type": "object"
       },
+      "ErrorCode": {
+        "enum": [
+          "replay_not_found",
+          "session_not_loaded",
+          "lap_not_found",
+          "replay_failed",
+          "too_many_replays",
+          "invalid_request",
+          "route_not_found",
+          "method_not_allowed",
+          "not_ready",
+          "internal_error",
+          "payload_too_large",
+          "rate_limited"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
       "ErrorResponse": {
         "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
           "detail": {
             "title": "Detail",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
             "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code",
+          "request_id"
         ],
         "title": "ErrorResponse",
         "type": "object"
@@ -82,19 +124,6 @@
         ],
         "title": "FlagScope",
         "type": "string"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
       },
       "HealthResponse": {
         "properties": {
@@ -182,6 +211,69 @@
           "interval_laps"
         ],
         "title": "IntervalEvent",
+        "type": "object"
+      },
+      "InvalidField": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Loc",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "InvalidField",
+        "type": "object"
+      },
+      "InvalidRequestResponse": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/InvalidField"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code",
+          "request_id",
+          "errors"
+        ],
+        "title": "InvalidRequestResponse",
         "type": "object"
       },
       "LapEvent": {
@@ -325,6 +417,39 @@
           "tyre_age_laps"
         ],
         "title": "LapEvent",
+        "type": "object"
+      },
+      "NotReadyResponse": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "dependencies": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DependencyState"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Dependency"
+            },
+            "title": "Dependencies",
+            "type": "object"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code",
+          "request_id",
+          "dependencies"
+        ],
+        "title": "NotReadyResponse",
         "type": "object"
       },
       "OvertakeEvent": {
@@ -572,6 +697,31 @@
           "message"
         ],
         "title": "RaceControlEvent",
+        "type": "object"
+      },
+      "ReadyResponse": {
+        "properties": {
+          "dependencies": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DependencyState"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Dependency"
+            },
+            "title": "Dependencies",
+            "type": "object"
+          },
+          "status": {
+            "const": "ready",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "dependencies"
+        ],
+        "title": "ReadyResponse",
         "type": "object"
       },
       "ReplayEvent": {
@@ -1003,46 +1153,6 @@
         "title": "TeamRadioEvent",
         "type": "object"
       },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
-      },
       "WeatherEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1109,6 +1219,7 @@
   "paths": {
     "/api/health": {
       "get": {
+        "description": "Liveness: the process answers.",
         "operationId": "read_health_api_health_get",
         "responses": {
           "200": {
@@ -1120,9 +1231,61 @@
               }
             },
             "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Read Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "description": "Readiness: PostgreSQL and Redis answer within the configured timeout.",
+        "operationId": "read_readiness_api_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotReadyResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read Readiness",
         "tags": [
           "health"
         ]
@@ -1166,11 +1329,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "503": {
             "content": {
@@ -1223,11 +1396,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Stop Replay",
@@ -1274,11 +1457,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Read Replay",
@@ -1379,13 +1572,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Watch Replay",
@@ -1434,11 +1637,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Pause Replay",
@@ -1487,11 +1700,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Resume Replay",
@@ -1561,11 +1784,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Seek Replay",
@@ -1624,11 +1857,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Set Replay Speed",
@@ -1655,6 +1898,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "List Sessions",
@@ -1703,11 +1956,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Read Session",

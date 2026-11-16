@@ -1,6 +1,8 @@
 from pydantic import Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings
 
+from f1_strategy.adapters.observability import LogLevel
+
 
 class PostgresSettings(BaseSettings):
     postgres_uri: SecretStr
@@ -25,6 +27,8 @@ class Settings(PostgresSettings):
 
 
 class ApiSettings(PostgresSettings):
+    log_level: LogLevel
+    readiness_timeout_s: float = Field(gt=0)
     postgres_pool_size: int = Field(gt=0)
     redis_uri: SecretStr
     redis_max_connections: int = Field(gt=0)
