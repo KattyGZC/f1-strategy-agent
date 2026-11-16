@@ -5,7 +5,7 @@ UNEXPLAINED_SUPPRESSION := (\# noqa(: [A-Z0-9, ]+)?|\# type: ignore(\[[^]]*\])?|
 CLI := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.cli
 MIGRATE := $(COMPOSE) run --build --rm backend python -m f1_strategy.adapters.migrate
 
-.PHONY: install check fast-check backend-static backend-check frontend-static frontend-check mutation openapi openapi-check format up down logs migrate ingest ingest-telemetry transform calibrate
+.PHONY: install check fast-check backend-static backend-check frontend-static frontend-check mutation edge-check openapi openapi-check format up down logs migrate ingest ingest-telemetry transform calibrate
 
 install:
 	cd backend && uv sync --locked
@@ -38,6 +38,9 @@ frontend-check: frontend-static
 
 mutation:
 	sh infra/mutation.sh "$(CURDIR)/backend"
+
+edge-check:
+	sh infra/edge-check.sh http://localhost:8080 "$(COMPOSE) logs --no-log-prefix backend"
 
 openapi:
 	cd backend && uv run python -m f1_strategy.adapters.http.openapi > ../frontend/openapi.json
