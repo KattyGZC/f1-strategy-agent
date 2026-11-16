@@ -122,5 +122,6 @@ jobs:
       - run: cp .env.example .env
       - run: make up
       - run: curl --fail --silent http://localhost:8080/api/health
+      - run: curl --fail --silent http://localhost:8080/api/health/ready
       - if: always()
         run: make down

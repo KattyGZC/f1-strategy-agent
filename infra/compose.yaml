@@ -70,6 +70,8 @@ services:
       REPLAY_TICK_S: ${REPLAY_TICK_S:?}
       REPLAY_LEASE_S: ${REPLAY_LEASE_S:?}
       REPLAY_APPEND_BATCH: ${REPLAY_APPEND_BATCH:?}
+      LOG_LEVEL: ${LOG_LEVEL:?}
+      READINESS_TIMEOUT_S: ${READINESS_TIMEOUT_S:?}
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,7 +86,7 @@ services:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/ready')"
       interval: 5s
       timeout: 3s
       retries: 10
