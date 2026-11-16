@@ -11,7 +11,7 @@ Fase 0, la base:
 - **Backend** (`backend/`): Python 3.12, FastAPI, un endpoint, `GET /api/health`. En capas: dominio, aplicación y adaptadores; `import-linter` rompe el build si una capa interna importa una externa.
 - **Frontend** (`frontend/`): React, Vite y TypeScript en modo estricto. Muestra el estado de la API mediante un cliente generado a partir del esquema OpenAPI del backend.
 - **Infraestructura** (`infra/compose.yaml`): PostgreSQL con pgvector, MongoDB, Redis, el backend y el frontend.
-- **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API, pruebas de mutación del dominio y una prueba de humo del stack completo. `main` recibe cambios solo por pull request con estas comprobaciones en verde; la dueña puede hacer merge con una en rojo (ADR 0010).
+- **CI** (`.github/workflows/ci.yml`): las mismas comprobaciones que `make check` en cada pull request, una comprobación de que el cliente generado coincide con la API, pruebas de mutación del dominio y una prueba de humo del stack completo con las comprobaciones del borde. `main` recibe cambios solo por pull request con estas comprobaciones en verde; la dueña puede hacer merge con una en rojo (ADR 0010).
 
 Fase 1, la ingesta:
 
@@ -38,7 +38,7 @@ Fase 4, el motor predictivo:
 Fase 5, el simulador, en curso:
 
 - **La pérdida en pit de cada carrera**, medida con sus propias paradas: una parada cuesta su vuelta de entrada y su vuelta de salida frente a la vuelta anterior y la posterior del mismo piloto, y el valor de la carrera es la mediana de sus paradas útiles (de 19,2 s en Spa a 29,5 s en Singapur en 2024). La lluvia no excluye una parada, porque las vueltas de alrededor tienen la misma lluvia; sí la excluyen el safety car, el virtual safety car o la bandera roja, otra parada al lado o estar justo después de la vuelta 1, cada una con su motivo. Una carrera medida con menos de 5 paradas conserva su valor, marcado como poco fiable: Interlagos en 2024, con 1 ([ADR 0015](docs/adr/0015-pit-loss-from-neighbouring-laps.md)).
-- **Cada petición se puede rastrear con un id**: cada respuesta de la API lleva `X-Request-ID`, y el backend escribe una línea JSON por petición (método, plantilla de la ruta, status, código de error, duración) y todas las demás líneas con ese id. Todo error responde `{"detail", "code", "request_id"}`, con `code` de una lista cerrada, y la pantalla muestra el id de la petición junto al error. Un fallo inesperado se registra una vez con su traza y responde 500 sin ella. `GET /api/health/ready` comprueba PostgreSQL y Redis y responde 503 nombrando el que no contesta; el healthcheck del stack lo usa ([ADR 0016](docs/adr/0016-request-tracing-and-edge-limits.md)).
+- **Cada petición se puede rastrear con un id**: cada respuesta de la API lleva `X-Request-ID`, y el backend escribe una línea JSON por petición (método, plantilla de la ruta, status, código de error, duración) y todas las demás líneas con ese id. Todo error responde `{"detail", "code", "request_id"}`, con `code` de una lista cerrada, y la pantalla muestra el id de la petición junto al error. Un fallo inesperado se registra una vez con su traza y responde 500 sin ella. `GET /api/health/ready` comprueba PostgreSQL y Redis y responde 503 nombrando el que no contesta; el healthcheck del stack lo usa. En el borde, nginx da a cada petición su propio id (nunca el del cliente), responde a un cuerpo de más de 8 KB con 413 `payload_too_large` y a más de 30 peticiones por segundo desde una dirección (ráfagas de 60) con 429 `rate_limited` en la misma forma, y pone una política de seguridad de contenido y las demás cabeceras de seguridad en cada respuesta ([ADR 0016](docs/adr/0016-request-tracing-and-edge-limits.md)).
 
 La pantalla del simulador y el asistente todavía no existen.
 
@@ -86,6 +86,7 @@ make install    # dependencias del backend y del frontend
 make check      # lint, formato, tipos, reglas de capas, tests con cobertura, build, contrato de la API
 make fast-check # la mitad estática de make check, en un minuto; Claude Code la corre antes de un commit
 make mutation   # pruebas de mutación del dominio en un contenedor Linux; falla si sobrevive un mutante
+make edge-check # contra un stack en marcha: ids de petición, forma de los errores, límites y cabeceras en nginx
 make format     # aplica los formateadores
 make openapi    # regenera el cliente de la API del frontend tras cambiar un endpoint
 ```

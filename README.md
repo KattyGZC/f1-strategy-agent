@@ -11,7 +11,7 @@ Phase 0, the foundation:
 - **Backend** (`backend/`): Python 3.12, FastAPI, one endpoint, `GET /api/health`. Layered as domain, application and adapters; `import-linter` fails the build if an inner layer imports an outer one.
 - **Frontend** (`frontend/`): React, Vite and TypeScript in strict mode. It shows the API status through a client generated from the backend's OpenAPI schema.
 - **Infrastructure** (`infra/compose.yaml`): PostgreSQL with pgvector, MongoDB, Redis, the backend and the frontend.
-- **CI** (`.github/workflows/ci.yml`): the same checks as `make check` on every pull request, a check that the generated client matches the API, mutation testing of the domain, and a smoke test of the full stack. `main` takes changes only through a pull request with these checks green; the owner can merge past a red one (ADR 0010).
+- **CI** (`.github/workflows/ci.yml`): the same checks as `make check` on every pull request, a check that the generated client matches the API, mutation testing of the domain, and a smoke test of the full stack with the edge checks. `main` takes changes only through a pull request with these checks green; the owner can merge past a red one (ADR 0010).
 
 Phase 1, ingestion:
 
@@ -38,7 +38,7 @@ Phase 4, the predictive engine:
 Phase 5, the simulator, in progress:
 
 - **The pit loss of each race**, measured on its own stops: a stop costs its in-lap and out-lap over the driver's lap before and lap after, and the race's value is the median of its usable stops (19.2 s at Spa to 29.5 s in Singapore in 2024). Rain does not exclude a stop, since the laps around it run in the same rain; stops under a safety car, virtual safety car or red flag, next to another stop or right after lap 1 do, each with its reason. A race measured on fewer than 5 stops keeps its value, marked as not reliable: Interlagos in 2024, with 1 ([ADR 0015](docs/adr/0015-pit-loss-from-neighbouring-laps.md)).
-- **Every request is traceable by one id**: each API response carries `X-Request-ID`, and the backend logs one JSON line per request (method, route template, status, error code, duration) and every other line under that id. Every error answers `{"detail", "code", "request_id"}`, with `code` from a closed list, and the screen shows the request id next to the error. An unexpected failure is logged once with its traceback and answers 500 without it. `GET /api/health/ready` checks PostgreSQL and Redis and answers 503 naming the one that does not answer; the stack's healthcheck uses it ([ADR 0016](docs/adr/0016-request-tracing-and-edge-limits.md)).
+- **Every request is traceable by one id**: each API response carries `X-Request-ID`, and the backend logs one JSON line per request (method, route template, status, error code, duration) and every other line under that id. Every error answers `{"detail", "code", "request_id"}`, with `code` from a closed list, and the screen shows the request id next to the error. An unexpected failure is logged once with its traceback and answers 500 without it. `GET /api/health/ready` checks PostgreSQL and Redis and answers 503 naming the one that does not answer; the stack's healthcheck uses it. At the edge, nginx gives every request its own id (never the client's), answers a body over 8 KB with 413 `payload_too_large` and more than 30 requests per second from one address (bursts of 60) with 429 `rate_limited` in the same shape, and sets a content security policy and the other security headers on every response ([ADR 0016](docs/adr/0016-request-tracing-and-edge-limits.md)).
 
 The simulator screen and the assistant do not exist yet.
 
@@ -86,6 +86,7 @@ make install    # backend and frontend dependencies
 make check      # lint, format, types, layer rules, tests with coverage, build, API contract
 make fast-check # the static half of make check, in about a minute; Claude Code runs it before a commit
 make mutation   # mutation testing of the domain in a Linux container; fails if a mutant survives
+make edge-check # against a running stack: request ids, error shape, limits and headers at nginx
 make format     # apply the formatters
 make openapi    # regenerate the frontend API client after changing an endpoint
 ```
