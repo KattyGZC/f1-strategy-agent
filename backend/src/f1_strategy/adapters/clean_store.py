@@ -8,7 +8,7 @@ from dataclasses import astuple, dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from psycopg import AsyncConnection, OperationalError, sql
+from psycopg import AsyncConnection, Error, OperationalError, sql
 from psycopg.rows import TupleRow, class_row
 from psycopg.types.enum import EnumInfo, register_enum
 from psycopg_pool import AsyncConnectionPool
@@ -22,6 +22,7 @@ from f1_strategy.application.calibration import (
     RaceSnapshot,
     StoredCalibration,
 )
+from f1_strategy.application.readiness import DependencyUnavailableError
 from f1_strategy.application.sessions import LoadedSession, SessionDriver, SessionEntry
 from f1_strategy.application.transform import (
     ErrorKind,
@@ -151,6 +152,20 @@ def connection_pool(postgres_uri: str, max_size: int, connect_timeout_s: int) ->
         kwargs={"connect_timeout": connect_timeout_s},
         open=False,
     )
+
+
+class PostgresPing:
+    """The readiness probe of the clean store (ADR 0016)."""
+
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def __call__(self) -> None:
+        try:
+            async with self._pool.connection() as connection:
+                await connection.execute("SELECT 1")
+        except Error as error:
+            raise DependencyUnavailableError(type(error).__name__) from error
 
 
 class PostgresClaim:

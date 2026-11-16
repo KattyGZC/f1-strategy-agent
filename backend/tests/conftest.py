@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Iterator
 
 import pytest
@@ -39,3 +40,19 @@ def postgres_server_uri() -> Iterator[str]:
 def redis_server_uri() -> Iterator[str]:
     with RedisContainer("redis:8") as container:
         yield f"redis://127.0.0.1:{container.get_exposed_port(container.port)}/0"
+
+
+@pytest.fixture
+def restored_logging() -> Iterator[None]:
+    """Puts back what `configure_logging` replaces, so one test's logging does not leak."""
+    root = logging.getLogger()
+    uvicorn = [logging.getLogger(name) for name in ("uvicorn", "uvicorn.error", "uvicorn.access")]
+    saved = (
+        root.handlers,
+        root.level,
+        [(one.handlers, one.propagate, one.disabled) for one in uvicorn],
+    )
+    yield
+    root.handlers, root.level = saved[0], saved[1]
+    for one, (handlers, propagate, disabled) in zip(uvicorn, saved[2], strict=True):
+        one.handlers, one.propagate, one.disabled = handlers, propagate, disabled

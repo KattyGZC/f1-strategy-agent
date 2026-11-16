@@ -15,6 +15,7 @@ def test_openapi_documents_the_health_response() -> None:
     }
     assert set(document["paths"]) == {
         "/api/health",
+        "/api/health/ready",
         "/api/replays",
         "/api/replays/{replay_id}",
         "/api/replays/{replay_id}/pause",

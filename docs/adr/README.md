@@ -19,6 +19,7 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0013](0013-a-seek-sends-what-is-still-current.md) | A seek sends at once only the events still current at its lap | Accepted |
 | [0014](0014-per-race-linear-lap-time-model.md) | Lap time is a per-race linear model calibrated on clean laps | Accepted |
 | [0015](0015-pit-loss-from-neighbouring-laps.md) | Pit loss is measured per race against the driver's neighbouring laps | Accepted |
+| [0016](0016-request-tracing-and-edge-limits.md) | Every request is traceable by one id, and the edge bounds what reaches the API | Accepted |
 
 ## Template
 

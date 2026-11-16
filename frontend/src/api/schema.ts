@@ -11,8 +11,31 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read Health */
+        /**
+         * Read Health
+         * @description Liveness: the process answers.
+         */
         get: operations["read_health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Readiness
+         * @description Readiness: PostgreSQL and Redis answer within the configured timeout.
+         */
+        get: operations["read_readiness_api_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -202,6 +225,13 @@ export interface components {
          * @enum {string}
          */
         Compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN";
+        /**
+         * Dependency
+         * @enum {string}
+         */
+        Dependency: "postgres" | "redis";
+        /** @enum {string} */
+        DependencyState: "ok" | "failed";
         /** DriverResponse */
         DriverResponse: {
             /** Driver Number */
@@ -218,10 +248,18 @@ export interface components {
             /** Team Name */
             team_name: string;
         };
+        /**
+         * ErrorCode
+         * @enum {string}
+         */
+        ErrorCode: "replay_not_found" | "session_not_loaded" | "lap_not_found" | "replay_failed" | "too_many_replays" | "invalid_request" | "route_not_found" | "method_not_allowed" | "not_ready" | "internal_error" | "payload_too_large" | "rate_limited";
         /** ErrorResponse */
         ErrorResponse: {
+            code: components["schemas"]["ErrorCode"];
             /** Detail */
             detail: string;
+            /** Request Id */
+            request_id: string;
         };
         /**
          * Flag
@@ -233,11 +271,6 @@ export interface components {
          * @enum {string}
          */
         FlagScope: "Track" | "Sector" | "Driver";
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
         /** HealthResponse */
         HealthResponse: {
             /**
@@ -268,6 +301,25 @@ export interface components {
              * @enum {string}
              */
             kind: "interval";
+        };
+        /** InvalidField */
+        InvalidField: {
+            /** Loc */
+            loc: (string | number)[];
+            /** Msg */
+            msg: string;
+            /** Type */
+            type: string;
+        };
+        /** InvalidRequestResponse */
+        InvalidRequestResponse: {
+            code: components["schemas"]["ErrorCode"];
+            /** Detail */
+            detail: string;
+            /** Errors */
+            errors: components["schemas"]["InvalidField"][];
+            /** Request Id */
+            request_id: string;
         };
         /** LapEvent */
         LapEvent: {
@@ -304,6 +356,18 @@ export interface components {
             st_speed: number | null;
             /** Tyre Age Laps */
             tyre_age_laps: number | null;
+        };
+        /** NotReadyResponse */
+        NotReadyResponse: {
+            code: components["schemas"]["ErrorCode"];
+            /** Dependencies */
+            dependencies: {
+                [key: string]: components["schemas"]["DependencyState"];
+            };
+            /** Detail */
+            detail: string;
+            /** Request Id */
+            request_id: string;
         };
         /** OvertakeEvent */
         OvertakeEvent: {
@@ -399,6 +463,18 @@ export interface components {
             sector: number | null;
             /** Seq */
             seq: number;
+        };
+        /** ReadyResponse */
+        ReadyResponse: {
+            /** Dependencies */
+            dependencies: {
+                [key: string]: components["schemas"]["DependencyState"];
+            };
+            /**
+             * Status
+             * @constant
+             */
+            status: "ready";
         };
         ReplayEvent: components["schemas"]["RaceControlEvent"] | components["schemas"]["WeatherEvent"] | components["schemas"]["PitEvent"] | components["schemas"]["LapEvent"] | components["schemas"]["PositionEvent"] | components["schemas"]["IntervalEvent"] | components["schemas"]["OvertakeEvent"] | components["schemas"]["TeamRadioEvent"];
         /** ReplayFailedEvent */
@@ -580,19 +656,6 @@ export interface components {
             /** Recording Url */
             recording_url: string;
         };
-        /** ValidationError */
-        ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-        };
         /** WeatherEvent */
         WeatherEvent: {
             /** Air Temperature */
@@ -647,6 +710,53 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_readiness_api_health_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadyResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotReadyResponse"];
+                };
+            };
         };
     };
     start_replay_api_replays_post: {
@@ -680,13 +790,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Service Unavailable */
@@ -729,13 +848,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -767,13 +895,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -809,13 +946,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "text/event-stream": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -849,13 +995,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -889,13 +1044,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -942,13 +1106,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -986,13 +1159,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1013,6 +1195,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"][];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1046,13 +1237,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

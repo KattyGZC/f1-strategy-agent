@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from dataclasses import replace
 
 import pytest
@@ -7,11 +8,11 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr, TypeAdapter
 from redis.asyncio import Redis
 
-from f1_strategy.adapters.http.app import create_app
+from f1_strategy.adapters.http.app import create_app, production_app
 from f1_strategy.adapters.replay_events import ReplayEvent, wire_event
 from f1_strategy.adapters.replay_store import RedisReplayStore
 from f1_strategy.adapters.settings import ApiSettings
-from tests.http.api import EVENTS, LAP_1_S, SESSION
+from tests.http.api import EVENTS, LAP_1_S, SESSION, error_body
 
 UNKNOWN_SESSION = 9999
 WIRE = TypeAdapter(ReplayEvent)
@@ -103,7 +104,9 @@ def test_a_session_not_in_the_clean_model_is_not_found(client: TestClient) -> No
     response = client.post("/api/replays", json={"session_key": UNKNOWN_SESSION, "speed": 1})
 
     assert response.status_code == 404
-    assert response.json() == {"detail": f"session {UNKNOWN_SESSION} is not in the clean model"}
+    assert response.json() == error_body(
+        response, "session_not_loaded", f"session {UNKNOWN_SESSION} is not in the clean model"
+    )
 
 
 def test_a_replay_past_the_limit_is_refused(client: TestClient) -> None:
@@ -113,7 +116,9 @@ def test_a_replay_past_the_limit_is_refused(client: TestClient) -> None:
     response = client.post("/api/replays", json={"session_key": SESSION, "speed": 1})
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "the number of active replays is at its limit"}
+    assert response.json() == error_body(
+        response, "too_many_replays", "the number of active replays is at its limit"
+    )
 
 
 def test_a_stopped_replay_is_gone_and_frees_its_place(client: TestClient) -> None:
@@ -144,7 +149,9 @@ def test_an_unknown_replay_is_not_found(client: TestClient, method: str, path: s
     response = client.request(method, path, json={"lap_number": 1})
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "replay missing does not exist or has expired"}
+    assert response.json() == error_body(
+        response, "replay_not_found", "replay missing does not exist or has expired"
+    )
 
 
 @pytest.mark.parametrize(
@@ -191,18 +198,47 @@ def test_a_failed_replay_ends_its_stream_with_the_failure(
     assert "id" not in received[-1]
     assert client.get(f"/api/replays/{replay_id}").json()["failure"] == "boom"
     assert seek.status_code == 409
-    assert seek.json() == {"detail": f"replay {replay_id} failed and cannot move: boom"}
+    assert seek.json() == error_body(
+        seek, "replay_failed", f"replay {replay_id} failed and cannot move: boom"
+    )
 
 
-def test_the_app_without_its_lifespan_has_no_services() -> None:
-    with pytest.raises(
-        RuntimeError,
-        match=r"^the API services are not running; start the app with its lifespan$",
-    ):
-        TestClient(create_app()).get("/api/replays/abc")
+def test_the_app_without_its_lifespan_answers_an_internal_error_and_logs_why(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = TestClient(create_app()).get("/api/replays/abc")
+
+    unhandled = [record for record in caplog.records if record.getMessage() == "unhandled_error"]
+    assert response.status_code == 500
+    assert response.json() == error_body(
+        response,
+        "internal_error",
+        "the API failed on an unexpected error; the logs hold it under this id",
+    )
+    assert len(unhandled) == 1
+    assert unhandled[0].exc_info is not None
+    assert str(unhandled[0].exc_info[1]) == (
+        "the API services are not running; start the app with its lifespan"
+    )
 
 
-def test_the_production_services_come_from_the_settings(
+@pytest.mark.usefixtures("restored_logging")
+def test_the_production_app_comes_from_the_settings(
+    monkeypatch: pytest.MonkeyPatch, settings: ApiSettings
+) -> None:
+    for name, value in settings.model_dump().items():
+        secret = value.get_secret_value() if isinstance(value, SecretStr) else value
+        monkeypatch.setenv(name.upper(), str(secret))
+    options = {"loop_factory": asyncio.SelectorEventLoop}
+
+    with TestClient(production_app(), backend_options=options) as test_client:
+        response = test_client.post("/api/replays", json={"session_key": SESSION, "speed": 1})
+
+    assert response.status_code == 201
+    assert logging.getLogger("uvicorn.access").disabled
+
+
+def test_the_app_built_alone_reads_its_settings_when_it_starts(
     monkeypatch: pytest.MonkeyPatch, settings: ApiSettings
 ) -> None:
     for name, value in settings.model_dump().items():
@@ -211,9 +247,7 @@ def test_the_production_services_come_from_the_settings(
     options = {"loop_factory": asyncio.SelectorEventLoop}
 
     with TestClient(create_app(), backend_options=options) as test_client:
-        response = test_client.post("/api/replays", json={"session_key": SESSION, "speed": 1})
-
-    assert response.status_code == 201
+        assert test_client.get("/api/health/ready").status_code == 200
 
 
 def test_a_seek_moves_the_replay_and_its_stream_restarts_from_a_reset(
@@ -248,5 +282,7 @@ def test_a_lap_no_driver_started_is_not_found(client: TestClient) -> None:
     response = client.post(f"/api/replays/{replay_id}/seek", json={"lap_number": 2})
 
     assert response.status_code == 404
-    assert response.json() == {"detail": f"session {SESSION} has no start for lap 2"}
+    assert response.json() == error_body(
+        response, "lap_not_found", f"session {SESSION} has no start for lap 2"
+    )
     assert client.get(f"/api/replays/{replay_id}").json()["status"] == "playing"

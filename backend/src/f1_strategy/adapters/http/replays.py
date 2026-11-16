@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from f1_strategy.adapters.http.responses import (
     CONFLICT,
+    INVALID,
     NOT_FOUND,
     UNAVAILABLE,
     ErrorResponse,
@@ -22,7 +23,7 @@ from f1_strategy.domain.playback import Paused, PlaybackStatus, ReplaySpeed
 REPLAY_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 STREAM_ID_PATTERN = r"^\d+-\d+$"
 
-router = APIRouter(tags=["replays"])
+router = APIRouter(tags=["replays"], responses=INVALID)
 
 
 class StartReplayRequest(BaseModel):

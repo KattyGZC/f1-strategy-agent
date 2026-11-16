@@ -17,4 +17,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 USER app
 EXPOSE 8000
 
-CMD ["uvicorn", "f1_strategy.adapters.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "f1_strategy.adapters.http.app:production_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

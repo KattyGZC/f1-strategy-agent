@@ -94,7 +94,10 @@ describe('ReplayScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Bahrain Grand Prix' })).toBeInTheDocument()
     const started = requests.find((request) => request.method === 'POST')
     expect(await started?.json()).toEqual({ session_key: 9468, speed: 60 })
-    expect(streams.map((stream) => stream.path)).toEqual(['/api/replays/replay-1/events'])
+    // The view opens its stream in an effect, which can run after the heading is on screen.
+    await vi.waitFor(() => {
+      expect(streams.map((stream) => stream.path)).toEqual(['/api/replays/replay-1/events'])
+    })
   })
 
   it('shows the start as pending until the API answers', async () => {

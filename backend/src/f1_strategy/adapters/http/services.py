@@ -13,12 +13,14 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from f1_strategy.adapters.clean_store import (
+    PostgresPing,
     PostgresReplayRows,
     PostgresSessionCatalog,
     connection_pool,
 )
-from f1_strategy.adapters.replay_store import RedisReplayStore, redis_client
+from f1_strategy.adapters.replay_store import RedisPing, RedisReplayStore, redis_client
 from f1_strategy.adapters.settings import ApiSettings
+from f1_strategy.application.readiness import CheckReadiness, Dependency
 from f1_strategy.application.replay import (
     ControlReplay,
     ProduceReplay,
@@ -41,6 +43,7 @@ class ApiServices:
     watch: WatchReplay
     list_sessions: ListSessions
     read_session: ReadSession
+    readiness: CheckReadiness
 
 
 def running_services(request: Request) -> ApiServices:
@@ -106,6 +109,13 @@ async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
                     watch=WatchReplay(store, producers, policy),
                     list_sessions=ListSessions(catalog),
                     read_session=ReadSession(catalog),
+                    readiness=CheckReadiness(
+                        {
+                            Dependency.POSTGRES: PostgresPing(pool),
+                            Dependency.REDIS: RedisPing(redis),
+                        },
+                        settings.readiness_timeout_s,
+                    ),
                 )
             finally:
                 await producers.aclose()

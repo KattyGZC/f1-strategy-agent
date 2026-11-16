@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.http.api import SESSION, SHORT_RACE
+from tests.http.api import SESSION, SHORT_RACE, error_body
 
 UNKNOWN_SESSION = 9999
 
@@ -51,7 +51,9 @@ def test_a_session_not_in_the_clean_model_is_not_found(client: TestClient) -> No
     response = client.get(f"/api/sessions/{UNKNOWN_SESSION}")
 
     assert response.status_code == 404
-    assert response.json() == {"detail": f"session {UNKNOWN_SESSION} is not in the clean model"}
+    assert response.json() == error_body(
+        response, "session_not_loaded", f"session {UNKNOWN_SESSION} is not in the clean model"
+    )
 
 
 @pytest.mark.parametrize("session_key", ["0", "-1", "race"])

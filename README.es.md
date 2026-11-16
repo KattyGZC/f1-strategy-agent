@@ -38,6 +38,7 @@ Fase 4, el motor predictivo:
 Fase 5, el simulador, en curso:
 
 - **La pérdida en pit de cada carrera**, medida con sus propias paradas: una parada cuesta su vuelta de entrada y su vuelta de salida frente a la vuelta anterior y la posterior del mismo piloto, y el valor de la carrera es la mediana de sus paradas útiles (de 19,2 s en Spa a 29,5 s en Singapur en 2024). La lluvia no excluye una parada, porque las vueltas de alrededor tienen la misma lluvia; sí la excluyen el safety car, el virtual safety car o la bandera roja, otra parada al lado o estar justo después de la vuelta 1, cada una con su motivo. Una carrera medida con menos de 5 paradas conserva su valor, marcado como poco fiable: Interlagos en 2024, con 1 ([ADR 0015](docs/adr/0015-pit-loss-from-neighbouring-laps.md)).
+- **Cada petición se puede rastrear con un id**: cada respuesta de la API lleva `X-Request-ID`, y el backend escribe una línea JSON por petición (método, plantilla de la ruta, status, código de error, duración) y todas las demás líneas con ese id. Todo error responde `{"detail", "code", "request_id"}`, con `code` de una lista cerrada, y la pantalla muestra el id de la petición junto al error. Un fallo inesperado se registra una vez con su traza y responde 500 sin ella. `GET /api/health/ready` comprueba PostgreSQL y Redis y responde 503 nombrando el que no contesta; el healthcheck del stack lo usa ([ADR 0016](docs/adr/0016-request-tracing-and-edge-limits.md)).
 
 La pantalla del simulador y el asistente todavía no existen.
 
@@ -50,7 +51,7 @@ cp .env.example .env
 make up
 ```
 
-Abre http://localhost:8080; la pantalla del replay lista las sesiones cargadas con `make transform` (más abajo). `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`, y uno copiado antes de la fase 3 las líneas `POSTGRES_POOL_SIZE`, `REDIS_*` y `REPLAY_*`, incluida `REPLAY_APPEND_BATCH`.
+Abre http://localhost:8080; la pantalla del replay lista las sesiones cargadas con `make transform` (más abajo). `make down` detiene el stack. `make up` también lleva el esquema de PostgreSQL a la última migración; `make migrate` hace solo eso. Un `.env` copiado antes de la fase 2 necesita las líneas nuevas `POSTGRES_CONNECT_TIMEOUT_S` y `TRANSFORM_*` de `.env.example`, y uno copiado antes de la fase 3 las líneas `POSTGRES_POOL_SIZE`, `REDIS_*` y `REPLAY_*`, incluida `REPLAY_APPEND_BATCH`; uno copiado antes de la fase 5 necesita `LOG_LEVEL` y `READINESS_TIMEOUT_S`.
 
 Con el stack levantado, ingiere datos crudos:
 

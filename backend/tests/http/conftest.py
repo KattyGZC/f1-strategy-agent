@@ -23,6 +23,8 @@ def settings(postgres_server_uri: str, redis_server_uri: str) -> ApiSettings:
     asyncio.run(load(postgres_uri, SHORT_RACE), loop_factory=asyncio.SelectorEventLoop)
     asyncio.run(flush(redis_server_uri))
     return ApiSettings(
+        log_level="INFO",
+        readiness_timeout_s=2,
         postgres_uri=SecretStr(postgres_uri),
         postgres_connect_timeout_s=CONNECT_TIMEOUT_S,
         postgres_pool_size=2,
