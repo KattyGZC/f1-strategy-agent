@@ -32,7 +32,7 @@ from f1_strategy.domain.least_squares import SingularSystemError, least_squares
 from f1_strategy.domain.pit_loss import PitLoss, PitStopExclusion, measure_pit_loss
 
 # Raise whenever the calibration of the same clean rows changes, thresholds included.
-CALIBRATION_VERSION = "2"
+CALIBRATION_VERSION = "3"
 
 COEFFICIENT_DECIMALS = 6
 COEFFICIENT_SCALE = 10**COEFFICIENT_DECIMALS
@@ -100,6 +100,7 @@ class Calibration:
     residual_rmse_s: Decimal
     exclusions: tuple[Exclusion, ...]
     track_temperature: TrackTemperature | None
+    rain_readings: int
     pit_loss: PitLoss | None
     pit_stop_exclusions: tuple[PitStopExclusion, ...]
 
@@ -282,6 +283,7 @@ def _calibration(
         residual_rmse_s=_rmse(residuals),
         exclusions=exclusions,
         track_temperature=_track_temperature(clean, rows.weather),
+        rain_readings=_rain_readings(rows),
         pit_loss=pit_loss.pit_loss,
         pit_stop_exclusions=pit_loss.exclusions,
     )
@@ -358,6 +360,14 @@ def _track_temperature(
     if not readings:
         return None
     return TrackTemperature(min(readings), median(readings), max(readings))
+
+
+def _rain_readings(rows: RaceRows) -> int:
+    """From the first lap's start to the last one's, of any driver: rain excludes the slick
+    laps around it, so the window of the clean laps would miss rain at either end."""
+    starts = [lap.date_start for lap in rows.laps if lap.date_start is not None]
+    first, last = min(starts), max(starts)
+    return sum(reading.rainfall for reading in rows.weather if first <= reading.date <= last)
 
 
 def _rmse(residuals: Sequence[Fraction]) -> Decimal:
