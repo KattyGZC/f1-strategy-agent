@@ -93,6 +93,7 @@ def test_a_held_out_stint_is_predicted_within_the_tolerance(case: Golden) -> Non
 GOLDEN_HASHES = {
     "1": "f05f4368aaef22bc4bf1328ad9711495b5cd76e8ec442274a6e56a44f9f07e05",
     "2": "c5760b805285a9546d7a8c8f44f48de241cf9c88056e14c54a33716a494159e6",
+    "3": "9125e8fb34e7db0127e65e78a306942139a76b3ea9eac733de9a0f41683e2d28",
 }
 
 
@@ -122,3 +123,17 @@ def test_a_race_pit_loss_is_the_one_measured_on_the_season(
 
     assert isinstance(calibration, Calibration)
     assert calibration.pit_loss == pit_loss
+
+
+# Each race's rain readings as counted over the local 2024 database (make calibrate, 2026-11-16).
+GOLDEN_RAIN_READINGS = {BAHRAIN: 0, CANADA: 27, SPAIN: 1, BRITAIN: 37}
+
+
+@pytest.mark.parametrize(("session_key", "rain_readings"), GOLDEN_RAIN_READINGS.items())
+def test_a_race_rain_readings_are_the_ones_counted_on_the_season(
+    session_key: int, rain_readings: int
+) -> None:
+    calibration = calibrate(race(session_key))
+
+    assert isinstance(calibration, Calibration)
+    assert calibration.rain_readings == rain_readings

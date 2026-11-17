@@ -10,8 +10,8 @@ MIGRATIONS = "f1_strategy.adapters:migrations"
 DRIVER = "postgresql+psycopg"
 
 
-def upgrade(postgres_uri: str, connect_timeout_s: int) -> None:
-    """Bring the schema to the latest migration, all of them in one transaction."""
+def upgrade(postgres_uri: str, connect_timeout_s: int, revision: str = "head") -> None:
+    """Bring the schema to `revision`, the latest by default, in one transaction."""
     engine = create_engine(
         make_url(postgres_uri).set(drivername=DRIVER),
         poolclass=NullPool,
@@ -22,7 +22,7 @@ def upgrade(postgres_uri: str, connect_timeout_s: int) -> None:
             config = Config()
             config.set_main_option("script_location", MIGRATIONS)
             config.attributes["connection"] = connection
-            command.upgrade(config, "head")
+            command.upgrade(config, revision)
     finally:
         engine.dispose()
 

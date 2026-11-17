@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -59,6 +60,7 @@ def test_a_race_built_from_known_coefficients_gives_them_back() -> None:
         residual_rmse_s=Decimal(0),
         exclusions=FIRST_LAPS,
         track_temperature=TrackTemperature(Decimal(30), Decimal(30), Decimal(30)),
+        rain_readings=0,
         pit_loss=None,
         pit_stop_exclusions=(),
     )  # fmt: skip
@@ -174,7 +176,24 @@ def test_a_race_without_readings_has_no_track_temperature() -> None:
     rows = synthetic_race()
     rows.weather = []
 
-    assert calibrated(rows).track_temperature is None
+    result = calibrated(rows)
+
+    assert result.track_temperature is None
+    assert result.rain_readings == 0
+
+
+def test_rain_counts_from_the_first_lap_to_the_last_even_where_no_lap_is_clean() -> None:
+    rows = synthetic_race()
+    rows.weather = [
+        weather(T0 - timedelta(minutes=1), rainfall=True),
+        weather(T0, rainfall=True),
+        weather(lap_start(30)),
+        weather(lap_start(59), rainfall=True),
+        weather(lap_start(60), rainfall=True),
+        weather(lap_start(60) + timedelta(seconds=1), rainfall=True),
+    ]
+
+    assert calibrated(rows).rain_readings == 3
 
 
 @given(data=st.data())

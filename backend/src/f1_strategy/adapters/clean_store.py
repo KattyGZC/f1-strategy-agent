@@ -117,8 +117,8 @@ SAVE_RUN = """
 """
 SAVE_CALIBRATION = """
     INSERT INTO calibration (session_key, race_laps, residual_rmse_s, track_temperature_min_c,
-        track_temperature_median_c, track_temperature_max_c)
-    VALUES (%s, %s, %s, %s, %s, %s)
+        track_temperature_median_c, track_temperature_max_c, rain_readings)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
 """
 SAVE_COMPOUND = """
     INSERT INTO calibration_compound (session_key, compound, base_s, degradation_s_per_lap,
@@ -518,6 +518,7 @@ async def _insert_calibration(
             calibration.race_laps,
             calibration.residual_rmse_s,
             *((None, None, None) if temperature is None else astuple(temperature)),
+            calibration.rain_readings,
         ],
     )
     async with connection.cursor() as cursor:

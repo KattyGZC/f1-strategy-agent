@@ -60,6 +60,7 @@ CALIBRATION = Calibration(
     residual_rmse_s=Decimal("0.453584"),
     exclusions=(Exclusion(ExclusionReason.FIRST_LAP, 20), Exclusion(ExclusionReason.OUTLIER, 3)),
     track_temperature=TrackTemperature(Decimal("21.9"), Decimal("22.8"), Decimal("23.9")),
+    rain_readings=12,
     pit_loss=PitLoss(Decimal("24.343"), 42),
     pit_stop_exclusions=(
         PitStopExclusion(PitStopExclusionReason.REFERENCE_IS_FIRST_LAP, 1),
@@ -145,8 +146,9 @@ async def test_a_saved_calibration_is_stored_whole(
         RACE_KEY: StoredCalibration(CalibrationStatus.CALIBRATED, FINGERPRINT)
     }
     assert rows(postgres_uri, "SELECT race_laps, residual_rmse_s, track_temperature_min_c, "
-                "track_temperature_median_c, track_temperature_max_c FROM calibration") == [
-        (57, Decimal("0.453584"), Decimal("21.9"), Decimal("22.8"), Decimal("23.9"))
+                "track_temperature_median_c, track_temperature_max_c, rain_readings "
+                "FROM calibration") == [
+        (57, Decimal("0.453584"), Decimal("21.9"), Decimal("22.8"), Decimal("23.9"), 12)
     ]  # fmt: skip
     assert rows(postgres_uri, "SELECT compound::text, base_s, degradation_s_per_lap, "
                 "progress_s_per_lap, residual_rmse_s, clean_laps, min_tyre_age_laps, "
@@ -302,3 +304,29 @@ async def test_a_wet_compound_cannot_be_calibrated(store: PostgresCalibrationSto
 
     assert rejected.value.diag.constraint_name == "calibration_compound_compound_check"
     assert await store.stored([RACE_KEY]) == {}
+
+
+@pytest.mark.anyio
+async def test_migration_0005_deletes_the_calibrations_it_cannot_complete(
+    postgres_server_uri: str,
+) -> None:
+    uri = fresh_database(postgres_server_uri)
+    upgrade(uri, CONNECT_TIMEOUT_S, "0004")
+    async with connection_pool(uri, max_size=2, connect_timeout_s=CONNECT_TIMEOUT_S) as pool:
+        await load(pool, RACE_SESSION)
+    with psycopg.connect(uri, connect_timeout=CONNECT_TIMEOUT_S) as connection:
+        connection.execute(
+            "INSERT INTO calibration_run (session_key, status, clean_output_hash, "
+            "calibration_version, calibrated_at) VALUES (%s, 'calibrated', 'out', '2', %s)",
+            (RACE_KEY, NOW),
+        )
+        connection.execute(
+            "INSERT INTO calibration (session_key, race_laps, residual_rmse_s) "
+            "VALUES (%s, 57, 0.4)",
+            (RACE_KEY,),
+        )
+
+    upgrade(uri, CONNECT_TIMEOUT_S)
+
+    assert rows(uri, "SELECT count(*) FROM calibration_run") == [(0,)]
+    assert rows(uri, "SELECT session_key FROM session") == [(RACE_KEY,)]
