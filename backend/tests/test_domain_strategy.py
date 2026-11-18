@@ -6,7 +6,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from f1_strategy.domain.clean import Compound
-from f1_strategy.domain.lap_time_model import Calibration, CompoundFit, DriverPace, PredictedLap
+from f1_strategy.domain.lap_time_model import CompoundFit, PredictedLap
 from f1_strategy.domain.pit_loss import PitLoss
 from f1_strategy.domain.strategy import (
     Caveat,
@@ -21,27 +21,7 @@ from f1_strategy.domain.strategy import (
     not_modelled,
     simulate,
 )
-
-DRIVER = 1
-# SOFT: 90 + 0.1 * age - 0.05 * (lap - 1); HARD: 91 + 0.05 * age - 0.05 * (lap - 1).
-CALIBRATION = Calibration(
-    race_laps=10,
-    compounds=(
-        CompoundFit(Compound.SOFT, Decimal(90), Decimal("0.1"), Decimal("-0.05"), Decimal("0.4"),
-                    clean_laps=40, min_tyre_age_laps=1, max_tyre_age_laps=5),
-        CompoundFit(Compound.HARD, Decimal(91), Decimal("0.05"), Decimal("-0.05"), Decimal("0.4"),
-                    clean_laps=40, min_tyre_age_laps=1, max_tyre_age_laps=8),
-    ),
-    drivers=(DriverPace(DRIVER, Decimal("0.3"), 40), DriverPace(44, Decimal("-0.3"), 40)),
-    residual_rmse_s=Decimal("0.4"),
-    exclusions=(),
-    track_temperature=None,
-    rain_readings=0,
-    pit_loss=PitLoss(Decimal("20.000"), stops=10),
-    pit_stop_exclusions=(),
-)  # fmt: skip
-SOFT_THEN_HARD = (StrategyStint(Compound.SOFT, 4, 0), StrategyStint(Compound.HARD, 6, 0))
-HARD_ONLY = (StrategyStint(Compound.HARD, 10, 0),)
+from tests.simulated_race import CALIBRATION, DRIVER, HARD_ONLY, SOFT_THEN_HARD
 
 
 def lap(lap_number: int, age: int, lap_time_s: str, *, extrapolated: bool = False) -> PredictedLap:
