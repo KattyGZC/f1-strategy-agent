@@ -3,16 +3,24 @@ that minute and has not ended."""
 
 from dataclasses import replace
 from datetime import timedelta
+from decimal import Decimal
 
 from httpx2 import Response
 from redis.asyncio import Redis
 
-from f1_strategy.adapters.clean_store import PostgresCleanStore, connection_pool
+from f1_strategy.adapters.clean_store import (
+    PostgresCalibrationStore,
+    PostgresCleanStore,
+    connection_pool,
+)
+from f1_strategy.application.calibration import Fingerprint
 from f1_strategy.application.transform import Load, Version
 from f1_strategy.domain.clean import CleanSession, Lap, clean_session, content_hash
+from f1_strategy.domain.lap_time_model import CALIBRATION_VERSION, DriverPace
 from f1_strategy.domain.replay import LapCompleted, timeline
 from tests.postgres import CONNECT_TIMEOUT_S
 from tests.samples import RACE, sample
+from tests.simulated_race import CALIBRATION
 
 SESSION = int(RACE)
 WINDOW = timedelta(seconds=60)
@@ -55,6 +63,12 @@ def with_lap_1_started(session: CleanSession) -> CleanSession:
 
 SHORT_RACE = with_lap_1_started(first_minute(clean_session(sample(RACE).raw())))
 EVENTS = timeline(SHORT_RACE).events
+# The ten-lap model of the strategy tests, on a driver of the sample: a calibrated driver must
+# have driven in the race.
+CALIBRATED_DRIVER = min(driver.driver_number for driver in SHORT_RACE.drivers)
+RACE_CALIBRATION = replace(
+    CALIBRATION, drivers=(DriverPace(CALIBRATED_DRIVER, Decimal("0.3"), 40),)
+)
 
 
 async def load(postgres_uri: str, session: CleanSession) -> None:
@@ -64,6 +78,14 @@ async def load(postgres_uri: str, session: CleanSession) -> None:
         async with store.claim(SESSION, version, EVENTS[0].at) as claim:
             assert claim is not None
             await claim.replace(Load(session, version, content_hash(session), EVENTS[0].at))
+
+
+async def calibrate(postgres_uri: str) -> None:
+    async with connection_pool(postgres_uri, 1, CONNECT_TIMEOUT_S) as pool:
+        fingerprint = Fingerprint(content_hash(SHORT_RACE), CALIBRATION_VERSION)
+        await PostgresCalibrationStore(pool).save(
+            SESSION, fingerprint, RACE_CALIBRATION, EVENTS[0].at
+        )
 
 
 async def flush(redis_uri: str) -> None:

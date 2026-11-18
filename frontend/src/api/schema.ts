@@ -44,6 +44,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/races": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Races
+         * @description Every calibrated race, the earliest first.
+         */
+        get: operations["list_races_api_races_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/races/{session_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Race */
+        get: operations["read_race_api_races__session_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/replays": {
         parameters: {
             query?: never;
@@ -216,15 +253,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/simulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Strategies
+         * @description Nothing is stored: the strategies are simulated on the race's calibration on every
+         *     request.
+         */
+        post: operations["simulate_strategies_api_simulations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Caveat
+         * @enum {string}
+         */
+        Caveat: "pit_loss_not_reliable" | "extrapolated_tyre_age" | "one_dry_compound";
+        /**
          * Compound
          * @enum {string}
          */
         Compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN";
+        /** CompoundResponse */
+        CompoundResponse: {
+            compound: components["schemas"]["Compound"];
+            /**
+             * Max Tyre Age Laps
+             * @description The oldest tyre among its clean laps
+             */
+            max_tyre_age_laps: number;
+            /**
+             * Min Tyre Age Laps
+             * @description The youngest tyre among its clean laps
+             */
+            min_tyre_age_laps: number;
+            /**
+             * Residual Rmse S
+             * @description The model's error on its clean laps
+             */
+            residual_rmse_s: number;
+        };
         /**
          * Dependency
          * @enum {string}
@@ -252,7 +334,7 @@ export interface components {
          * ErrorCode
          * @enum {string}
          */
-        ErrorCode: "replay_not_found" | "session_not_loaded" | "lap_not_found" | "replay_failed" | "too_many_replays" | "invalid_request" | "route_not_found" | "method_not_allowed" | "not_ready" | "internal_error" | "payload_too_large" | "rate_limited";
+        ErrorCode: "replay_not_found" | "session_not_loaded" | "lap_not_found" | "race_not_calibrated" | "driver_not_calibrated" | "replay_failed" | "too_many_replays" | "invalid_request" | "route_not_found" | "method_not_allowed" | "not_ready" | "internal_error" | "payload_too_large" | "rate_limited";
         /** ErrorResponse */
         ErrorResponse: {
             code: components["schemas"]["ErrorCode"];
@@ -357,6 +439,25 @@ export interface components {
             /** Tyre Age Laps */
             tyre_age_laps: number | null;
         };
+        /** LapResponse */
+        LapResponse: {
+            /**
+             * Extrapolated
+             * @description The tyre is older or newer than any calibrated lap
+             */
+            extrapolated: boolean;
+            /** Lap Number */
+            lap_number: number;
+            /** Lap Time S */
+            lap_time_s: number;
+            /** Tyre Age Laps */
+            tyre_age_laps: number;
+        };
+        /**
+         * NotModelled
+         * @enum {string}
+         */
+        NotModelled: "standing_start" | "starting_fuel" | "wind" | "driver_aggressiveness" | "track_temperature" | "rain_on_slicks";
         /** NotReadyResponse */
         NotReadyResponse: {
             code: components["schemas"]["ErrorCode"];
@@ -408,6 +509,21 @@ export interface components {
             lap_number: number;
             /** Stop Duration */
             stop_duration: number | null;
+        };
+        /** PitLossResponse */
+        PitLossResponse: {
+            /** Pit Loss S */
+            pit_loss_s: number;
+            /**
+             * Reliable
+             * @description False when measured on fewer than 5 stops
+             */
+            reliable: boolean;
+            /**
+             * Stops
+             * @description The stops it was measured on
+             */
+            stops: number;
         };
         /**
          * PlaybackStatus
@@ -464,6 +580,55 @@ export interface components {
             /** Seq */
             seq: number;
         };
+        /** RaceModelResponse */
+        RaceModelResponse: {
+            /**
+             * Compounds
+             * @description The compounds a stint can run
+             */
+            compounds: components["schemas"]["CompoundResponse"][];
+            /**
+             * Driver Numbers
+             * @description The drivers with a calibrated pace, by number
+             */
+            driver_numbers: number[];
+            /** Not Modelled */
+            not_modelled: components["schemas"]["NotModelled"][];
+            /** @description None when no stop could be measured */
+            pit_loss: components["schemas"]["PitLossResponse"] | null;
+            /** Race Laps */
+            race_laps: number;
+            /** Rain Readings */
+            rain_readings: number;
+            /**
+             * Residual Rmse S
+             * @description The model's error on the race's clean laps
+             */
+            residual_rmse_s: number;
+            /** Session Key */
+            session_key: number;
+            track_temperature: components["schemas"]["TrackTemperatureResponse"] | null;
+        };
+        /** RaceResponse */
+        RaceResponse: {
+            /** Circuit Short Name */
+            circuit_short_name: string;
+            /** Country Name */
+            country_name: string;
+            /**
+             * Date Start
+             * Format: date-time
+             */
+            date_start: string;
+            /** Meeting Name */
+            meeting_name: string;
+            /** Race Laps */
+            race_laps: number;
+            /** Session Key */
+            session_key: number;
+            /** Year */
+            year: number;
+        };
         /** ReadyResponse */
         ReadyResponse: {
             /** Dependencies */
@@ -475,6 +640,20 @@ export interface components {
              * @constant
              */
             status: "ready";
+        };
+        /** RejectedResponse */
+        RejectedResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            outcome: "rejected";
+            reason: components["schemas"]["StrategyRejection"];
+            /**
+             * Stint Number
+             * @description None when the reason is the whole strategy's
+             */
+            stint_number: number | null;
         };
         ReplayEvent: components["schemas"]["RaceControlEvent"] | components["schemas"]["WeatherEvent"] | components["schemas"]["PitEvent"] | components["schemas"]["LapEvent"] | components["schemas"]["PositionEvent"] | components["schemas"]["IntervalEvent"] | components["schemas"]["OvertakeEvent"] | components["schemas"]["TeamRadioEvent"];
         /** ReplayFailedEvent */
@@ -629,6 +808,58 @@ export interface components {
          * @enum {string}
          */
         SessionType: "Practice" | "Qualifying" | "Race";
+        /** SimulatedResponse */
+        SimulatedResponse: {
+            /** Caveats */
+            caveats: components["schemas"]["Caveat"][];
+            /**
+             * Gap To Fastest S
+             * @description Against the fastest simulated strategy
+             */
+            gap_to_fastest_s: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            outcome: "simulated";
+            /** Stints */
+            stints: components["schemas"]["StintResponse"][];
+            /** Stops */
+            stops: components["schemas"]["StopResponse"][];
+            /**
+             * Total S
+             * @description The laps and the stops; not a race result
+             */
+            total_s: number;
+        };
+        /** SimulationRequest */
+        SimulationRequest: {
+            /**
+             * Driver Number
+             * @description None simulates the average car of the race
+             */
+            driver_number?: number | null;
+            /** Session Key */
+            session_key: number;
+            /**
+             * Strategies
+             * @description Each strategy's stints in order; the first starts on lap 1
+             */
+            strategies: components["schemas"]["StintRequest"][][];
+        };
+        /** SimulationResponse */
+        SimulationResponse: {
+            /**
+             * Not Modelled
+             * @description What every strategy of the race omits
+             */
+            not_modelled: components["schemas"]["NotModelled"][];
+            /**
+             * Results
+             * @description In the order of the strategies
+             */
+            results: components["schemas"]["StrategyResponse"][];
+        };
         /** SpeedRequest */
         SpeedRequest: {
             speed: components["schemas"]["ReplaySpeed"];
@@ -639,6 +870,36 @@ export interface components {
             session_key: number;
             speed: components["schemas"]["ReplaySpeed"];
         };
+        /** StintRequest */
+        StintRequest: {
+            compound: components["schemas"]["Compound"];
+            /** Laps */
+            laps: number;
+            /**
+             * Tyre Age At Start Laps
+             * @description 0 is a new set
+             */
+            tyre_age_at_start_laps: number;
+        };
+        /** StintResponse */
+        StintResponse: {
+            compound: components["schemas"]["Compound"];
+            /** Laps */
+            laps: components["schemas"]["LapResponse"][];
+        };
+        /** StopResponse */
+        StopResponse: {
+            /** In Lap */
+            in_lap: number;
+            /** Pit Loss S */
+            pit_loss_s: number;
+        };
+        /**
+         * StrategyRejection
+         * @enum {string}
+         */
+        StrategyRejection: "no_stints" | "zero_laps" | "negative_tyre_age" | "compound_not_calibrated" | "laps_do_not_add_up" | "no_pit_loss";
+        StrategyResponse: components["schemas"]["SimulatedResponse"] | components["schemas"]["RejectedResponse"];
         /** TeamRadioEvent */
         TeamRadioEvent: {
             /**
@@ -655,6 +916,15 @@ export interface components {
             kind: "team_radio";
             /** Recording Url */
             recording_url: string;
+        };
+        /** TrackTemperatureResponse */
+        TrackTemperatureResponse: {
+            /** Max C */
+            max_c: number;
+            /** Median C */
+            median_c: number;
+            /** Min C */
+            min_c: number;
         };
         /** WeatherEvent */
         WeatherEvent: {
@@ -755,6 +1025,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotReadyResponse"];
+                };
+            };
+        };
+    };
+    list_races_api_races_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaceResponse"][];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_race_api_races__session_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaceModelResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1226,6 +1574,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionEntryResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    simulate_strategies_api_simulations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationResponse"];
                 };
             };
             /** @description Not Found */

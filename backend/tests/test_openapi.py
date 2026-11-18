@@ -25,6 +25,9 @@ def test_openapi_documents_the_health_response() -> None:
         "/api/replays/{replay_id}/events",
         "/api/sessions",
         "/api/sessions/{session_key}",
+        "/api/races",
+        "/api/races/{session_key}",
+        "/api/simulations",
     }
 
 

@@ -1,6 +1,15 @@
 {
   "components": {
     "schemas": {
+      "Caveat": {
+        "enum": [
+          "pit_loss_not_reliable",
+          "extrapolated_tyre_age",
+          "one_dry_compound"
+        ],
+        "title": "Caveat",
+        "type": "string"
+      },
       "Compound": {
         "enum": [
           "SOFT",
@@ -12,6 +21,36 @@
         ],
         "title": "Compound",
         "type": "string"
+      },
+      "CompoundResponse": {
+        "properties": {
+          "compound": {
+            "$ref": "#/components/schemas/Compound"
+          },
+          "max_tyre_age_laps": {
+            "description": "The oldest tyre among its clean laps",
+            "title": "Max Tyre Age Laps",
+            "type": "integer"
+          },
+          "min_tyre_age_laps": {
+            "description": "The youngest tyre among its clean laps",
+            "title": "Min Tyre Age Laps",
+            "type": "integer"
+          },
+          "residual_rmse_s": {
+            "description": "The model's error on its clean laps",
+            "title": "Residual Rmse S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "compound",
+          "min_tyre_age_laps",
+          "max_tyre_age_laps",
+          "residual_rmse_s"
+        ],
+        "title": "CompoundResponse",
+        "type": "object"
       },
       "Dependency": {
         "enum": [
@@ -67,6 +106,8 @@
           "replay_not_found",
           "session_not_loaded",
           "lap_not_found",
+          "race_not_calibrated",
+          "driver_not_calibrated",
           "replay_failed",
           "too_many_replays",
           "invalid_request",
@@ -419,6 +460,47 @@
         "title": "LapEvent",
         "type": "object"
       },
+      "LapResponse": {
+        "properties": {
+          "extrapolated": {
+            "description": "The tyre is older or newer than any calibrated lap",
+            "title": "Extrapolated",
+            "type": "boolean"
+          },
+          "lap_number": {
+            "title": "Lap Number",
+            "type": "integer"
+          },
+          "lap_time_s": {
+            "title": "Lap Time S",
+            "type": "number"
+          },
+          "tyre_age_laps": {
+            "title": "Tyre Age Laps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lap_number",
+          "tyre_age_laps",
+          "lap_time_s",
+          "extrapolated"
+        ],
+        "title": "LapResponse",
+        "type": "object"
+      },
+      "NotModelled": {
+        "enum": [
+          "standing_start",
+          "starting_fuel",
+          "wind",
+          "driver_aggressiveness",
+          "track_temperature",
+          "rain_on_slicks"
+        ],
+        "title": "NotModelled",
+        "type": "string"
+      },
       "NotReadyResponse": {
         "properties": {
           "code": {
@@ -541,6 +623,31 @@
           "stop_duration"
         ],
         "title": "PitEvent",
+        "type": "object"
+      },
+      "PitLossResponse": {
+        "properties": {
+          "pit_loss_s": {
+            "title": "Pit Loss S",
+            "type": "number"
+          },
+          "reliable": {
+            "description": "False when measured on fewer than 5 stops",
+            "title": "Reliable",
+            "type": "boolean"
+          },
+          "stops": {
+            "description": "The stops it was measured on",
+            "title": "Stops",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pit_loss_s",
+          "stops",
+          "reliable"
+        ],
+        "title": "PitLossResponse",
         "type": "object"
       },
       "PlaybackStatus": {
@@ -699,6 +806,128 @@
         "title": "RaceControlEvent",
         "type": "object"
       },
+      "RaceModelResponse": {
+        "properties": {
+          "compounds": {
+            "description": "The compounds a stint can run",
+            "items": {
+              "$ref": "#/components/schemas/CompoundResponse"
+            },
+            "title": "Compounds",
+            "type": "array"
+          },
+          "driver_numbers": {
+            "description": "The drivers with a calibrated pace, by number",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Driver Numbers",
+            "type": "array"
+          },
+          "not_modelled": {
+            "items": {
+              "$ref": "#/components/schemas/NotModelled"
+            },
+            "title": "Not Modelled",
+            "type": "array"
+          },
+          "pit_loss": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PitLossResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None when no stop could be measured"
+          },
+          "race_laps": {
+            "title": "Race Laps",
+            "type": "integer"
+          },
+          "rain_readings": {
+            "title": "Rain Readings",
+            "type": "integer"
+          },
+          "residual_rmse_s": {
+            "description": "The model's error on the race's clean laps",
+            "title": "Residual Rmse S",
+            "type": "number"
+          },
+          "session_key": {
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "track_temperature": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackTemperatureResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "session_key",
+          "race_laps",
+          "compounds",
+          "driver_numbers",
+          "residual_rmse_s",
+          "pit_loss",
+          "track_temperature",
+          "rain_readings",
+          "not_modelled"
+        ],
+        "title": "RaceModelResponse",
+        "type": "object"
+      },
+      "RaceResponse": {
+        "properties": {
+          "circuit_short_name": {
+            "title": "Circuit Short Name",
+            "type": "string"
+          },
+          "country_name": {
+            "title": "Country Name",
+            "type": "string"
+          },
+          "date_start": {
+            "format": "date-time",
+            "title": "Date Start",
+            "type": "string"
+          },
+          "meeting_name": {
+            "title": "Meeting Name",
+            "type": "string"
+          },
+          "race_laps": {
+            "title": "Race Laps",
+            "type": "integer"
+          },
+          "session_key": {
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_key",
+          "date_start",
+          "year",
+          "meeting_name",
+          "circuit_short_name",
+          "country_name",
+          "race_laps"
+        ],
+        "title": "RaceResponse",
+        "type": "object"
+      },
       "ReadyResponse": {
         "properties": {
           "dependencies": {
@@ -722,6 +951,37 @@
           "dependencies"
         ],
         "title": "ReadyResponse",
+        "type": "object"
+      },
+      "RejectedResponse": {
+        "properties": {
+          "outcome": {
+            "const": "rejected",
+            "default": "rejected",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/StrategyRejection"
+          },
+          "stint_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None when the reason is the whole strategy's",
+            "title": "Stint Number"
+          }
+        },
+        "required": [
+          "reason",
+          "stint_number"
+        ],
+        "title": "RejectedResponse",
         "type": "object"
       },
       "ReplayEvent": {
@@ -1092,6 +1352,125 @@
         "title": "SessionType",
         "type": "string"
       },
+      "SimulatedResponse": {
+        "properties": {
+          "caveats": {
+            "items": {
+              "$ref": "#/components/schemas/Caveat"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "gap_to_fastest_s": {
+            "description": "Against the fastest simulated strategy",
+            "title": "Gap To Fastest S",
+            "type": "number"
+          },
+          "outcome": {
+            "const": "simulated",
+            "default": "simulated",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "stints": {
+            "items": {
+              "$ref": "#/components/schemas/StintResponse"
+            },
+            "title": "Stints",
+            "type": "array"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/StopResponse"
+            },
+            "title": "Stops",
+            "type": "array"
+          },
+          "total_s": {
+            "description": "The laps and the stops; not a race result",
+            "title": "Total S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "stints",
+          "stops",
+          "total_s",
+          "gap_to_fastest_s",
+          "caveats"
+        ],
+        "title": "SimulatedResponse",
+        "type": "object"
+      },
+      "SimulationRequest": {
+        "properties": {
+          "driver_number": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None simulates the average car of the race",
+            "title": "Driver Number"
+          },
+          "session_key": {
+            "exclusiveMinimum": 0.0,
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "strategies": {
+            "description": "Each strategy's stints in order; the first starts on lap 1",
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/StintRequest"
+              },
+              "maxItems": 6,
+              "minItems": 1,
+              "type": "array"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_key",
+          "strategies"
+        ],
+        "title": "SimulationRequest",
+        "type": "object"
+      },
+      "SimulationResponse": {
+        "properties": {
+          "not_modelled": {
+            "description": "What every strategy of the race omits",
+            "items": {
+              "$ref": "#/components/schemas/NotModelled"
+            },
+            "title": "Not Modelled",
+            "type": "array"
+          },
+          "results": {
+            "description": "In the order of the strategies",
+            "items": {
+              "$ref": "#/components/schemas/StrategyResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "not_modelled"
+        ],
+        "title": "SimulationResponse",
+        "type": "object"
+      },
       "SpeedRequest": {
         "properties": {
           "speed": {
@@ -1122,6 +1501,99 @@
         "title": "StartReplayRequest",
         "type": "object"
       },
+      "StintRequest": {
+        "properties": {
+          "compound": {
+            "$ref": "#/components/schemas/Compound"
+          },
+          "laps": {
+            "minimum": 1.0,
+            "title": "Laps",
+            "type": "integer"
+          },
+          "tyre_age_at_start_laps": {
+            "description": "0 is a new set",
+            "maximum": 99.0,
+            "minimum": 0.0,
+            "title": "Tyre Age At Start Laps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "compound",
+          "laps",
+          "tyre_age_at_start_laps"
+        ],
+        "title": "StintRequest",
+        "type": "object"
+      },
+      "StintResponse": {
+        "properties": {
+          "compound": {
+            "$ref": "#/components/schemas/Compound"
+          },
+          "laps": {
+            "items": {
+              "$ref": "#/components/schemas/LapResponse"
+            },
+            "title": "Laps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "compound",
+          "laps"
+        ],
+        "title": "StintResponse",
+        "type": "object"
+      },
+      "StopResponse": {
+        "properties": {
+          "in_lap": {
+            "title": "In Lap",
+            "type": "integer"
+          },
+          "pit_loss_s": {
+            "title": "Pit Loss S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "in_lap",
+          "pit_loss_s"
+        ],
+        "title": "StopResponse",
+        "type": "object"
+      },
+      "StrategyRejection": {
+        "enum": [
+          "no_stints",
+          "zero_laps",
+          "negative_tyre_age",
+          "compound_not_calibrated",
+          "laps_do_not_add_up",
+          "no_pit_loss"
+        ],
+        "title": "StrategyRejection",
+        "type": "string"
+      },
+      "StrategyResponse": {
+        "discriminator": {
+          "mapping": {
+            "rejected": "#/components/schemas/RejectedResponse",
+            "simulated": "#/components/schemas/SimulatedResponse"
+          },
+          "propertyName": "outcome"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SimulatedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/RejectedResponse"
+          }
+        ]
+      },
       "TeamRadioEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1151,6 +1623,29 @@
           "recording_url"
         ],
         "title": "TeamRadioEvent",
+        "type": "object"
+      },
+      "TrackTemperatureResponse": {
+        "properties": {
+          "max_c": {
+            "title": "Max C",
+            "type": "number"
+          },
+          "median_c": {
+            "title": "Median C",
+            "type": "number"
+          },
+          "min_c": {
+            "title": "Min C",
+            "type": "number"
+          }
+        },
+        "required": [
+          "min_c",
+          "median_c",
+          "max_c"
+        ],
+        "title": "TrackTemperatureResponse",
         "type": "object"
       },
       "WeatherEvent": {
@@ -1288,6 +1783,105 @@
         "summary": "Read Readiness",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/races": {
+      "get": {
+        "description": "Every calibrated race, the earliest first.",
+        "operationId": "list_races_api_races_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RaceResponse"
+                  },
+                  "title": "Response List Races Api Races Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List Races",
+        "tags": [
+          "races"
+        ]
+      }
+    },
+    "/api/races/{session_key}": {
+      "get": {
+        "operationId": "read_race_api_races__session_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_key",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Session Key",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RaceModelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Read Race",
+        "tags": [
+          "races"
         ]
       }
     },
@@ -1976,6 +2570,68 @@
         "summary": "Read Session",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/api/simulations": {
+      "post": {
+        "description": "Nothing is stored: the strategies are simulated on the race's calibration on every\nrequest.",
+        "operationId": "simulate_strategies_api_simulations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Simulate Strategies",
+        "tags": [
+          "simulations"
         ]
       }
     }

@@ -12,6 +12,8 @@ class ErrorCode(StrEnum):
     REPLAY_NOT_FOUND = "replay_not_found"
     SESSION_NOT_LOADED = "session_not_loaded"
     LAP_NOT_FOUND = "lap_not_found"
+    RACE_NOT_CALIBRATED = "race_not_calibrated"
+    DRIVER_NOT_CALIBRATED = "driver_not_calibrated"
     REPLAY_FAILED = "replay_failed"
     TOO_MANY_REPLAYS = "too_many_replays"
     INVALID_REQUEST = "invalid_request"

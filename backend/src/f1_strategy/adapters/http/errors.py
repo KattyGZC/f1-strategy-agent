@@ -22,6 +22,8 @@ from f1_strategy.application.replay import (
     SessionNotLoadedError,
     TooManyReplaysError,
 )
+from f1_strategy.application.simulation import RaceNotCalibratedError
+from f1_strategy.domain.strategy import DriverNotCalibratedError
 
 type Handler = Callable[[Request, Exception], JSONResponse]
 
@@ -29,7 +31,9 @@ type Handler = Callable[[Request, Exception], JSONResponse]
 ERROR_CODE_STATE = "error_code"
 
 USE_CASE_ERRORS: dict[type[Exception], tuple[int, ErrorCode]] = {
+    DriverNotCalibratedError: (status.HTTP_404_NOT_FOUND, ErrorCode.DRIVER_NOT_CALIBRATED),
     LapNotFoundError: (status.HTTP_404_NOT_FOUND, ErrorCode.LAP_NOT_FOUND),
+    RaceNotCalibratedError: (status.HTTP_404_NOT_FOUND, ErrorCode.RACE_NOT_CALIBRATED),
     ReplayFailedError: (status.HTTP_409_CONFLICT, ErrorCode.REPLAY_FAILED),
     ReplayNotFoundError: (status.HTTP_404_NOT_FOUND, ErrorCode.REPLAY_NOT_FOUND),
     SessionNotLoadedError: (status.HTTP_404_NOT_FOUND, ErrorCode.SESSION_NOT_LOADED),

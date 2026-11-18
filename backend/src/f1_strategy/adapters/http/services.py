@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from f1_strategy.adapters.clean_store import (
+    PostgresCalibratedRaces,
     PostgresPing,
     PostgresReplayRows,
     PostgresSessionCatalog,
@@ -31,6 +32,7 @@ from f1_strategy.application.replay import (
     WatchReplay,
 )
 from f1_strategy.application.sessions import ListSessions, ReadSession
+from f1_strategy.application.simulation import ListRaces, ReadRace, SimulateStrategies
 
 REPLAY_ID_BYTES = 16
 
@@ -43,6 +45,9 @@ class ApiServices:
     watch: WatchReplay
     list_sessions: ListSessions
     read_session: ReadSession
+    list_races: ListRaces
+    read_race: ReadRace
+    simulate: SimulateStrategies
     readiness: CheckReadiness
 
 
@@ -95,6 +100,7 @@ async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
     )
     rows = PostgresReplayRows(pool)
     catalog = PostgresSessionCatalog(pool)
+    races = PostgresCalibratedRaces(pool)
     store = RedisReplayStore(redis, settings.replay_max_active, settings.replay_idle_ttl_s)
     producers = ReplayProducers(
         ProduceReplay(rows, store, policy, clock, owner=process_owner()), store
@@ -109,6 +115,9 @@ async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
                     watch=WatchReplay(store, producers, policy),
                     list_sessions=ListSessions(catalog),
                     read_session=ReadSession(catalog),
+                    list_races=ListRaces(races),
+                    read_race=ReadRace(races),
+                    simulate=SimulateStrategies(races),
                     readiness=CheckReadiness(
                         {
                             Dependency.POSTGRES: PostgresPing(pool),
