@@ -1,6 +1,7 @@
 import type { components } from '../api/schema.ts'
 import { formatRaceTime, formatSeconds } from '../replay/format.ts'
 import { CAVEAT_LABEL, NOT_MODELLED_LABEL, REJECTION_LABEL } from './labels.ts'
+import { LapChart, type Series } from './LapChart.tsx'
 
 type Schemas = components['schemas']
 type Simulated = Schemas['SimulatedResponse']
@@ -12,8 +13,12 @@ interface Props {
 
 /** Each strategy as the API answered it, in the order it was sent. */
 export function StrategyResults({ simulation }: Readonly<Props>) {
+  const series: Series[] = simulation.results.flatMap((result, index) =>
+    result.outcome === 'simulated' ? [{ number: index + 1, result }] : [],
+  )
   return (
     <section className="results" aria-label="Results">
+      {series.length === 0 ? null : <LapChart series={series} />}
       <div className="result-cards">
         {simulation.results.map((result, index) =>
           result.outcome === 'simulated' ? (

@@ -268,36 +268,46 @@ function simulatedLap(lapNumber: number, tyreAge: number, lapTimeS: number) {
   }
 }
 
-/** A one-stop strategy against a two-stop one, as the API answered them for Bahrain 2024. */
+/** A one-stop strategy and a two-stop one, as the API answered them for Bahrain 2024. */
+export const ONE_STOP: Schemas['SimulatedResponse'] = {
+  outcome: 'simulated',
+  stints: [
+    { compound: 'SOFT', laps: [simulatedLap(1, 0, 97.8), simulatedLap(2, 1, 97.9)] },
+    { compound: 'HARD', laps: [simulatedLap(3, 0, 98.6), simulatedLap(4, 1, 98.5)] },
+  ],
+  stops: [{ in_lap: 2, pit_loss_s: 24.343 }],
+  total_s: 5588.697,
+  gap_to_fastest_s: 17.135,
+  caveats: ['extrapolated_tyre_age'],
+}
+
+export const TWO_STOPS: Schemas['SimulatedResponse'] = {
+  outcome: 'simulated',
+  stints: [
+    { compound: 'SOFT', laps: [simulatedLap(1, 0, 97.8)] },
+    { compound: 'HARD', laps: [simulatedLap(2, 0, 98.7)] },
+    { compound: 'HARD', laps: [simulatedLap(3, 0, 98.6), simulatedLap(4, 1, 98.4)] },
+  ],
+  stops: [
+    { in_lap: 1, pit_loss_s: 24.343 },
+    { in_lap: 2, pit_loss_s: 24.343 },
+  ],
+  total_s: 5571.562,
+  gap_to_fastest_s: 0,
+  caveats: ['pit_loss_not_reliable', 'one_dry_compound'],
+}
+
+export const REJECTED: Schemas['RejectedResponse'] = {
+  outcome: 'rejected',
+  reason: 'compound_not_calibrated',
+  stint_number: 1,
+}
+
 export const SIMULATION: Schemas['SimulationResponse'] = {
   results: [
-    {
-      outcome: 'simulated',
-      stints: [
-        { compound: 'SOFT', laps: [simulatedLap(1, 0, 97.8), simulatedLap(2, 1, 97.9)] },
-        { compound: 'HARD', laps: [simulatedLap(3, 0, 98.6), simulatedLap(4, 1, 98.5)] },
-      ],
-      stops: [{ in_lap: 2, pit_loss_s: 24.343 }],
-      total_s: 5588.697,
-      gap_to_fastest_s: 17.135,
-      caveats: ['extrapolated_tyre_age'],
-    },
-    {
-      outcome: 'simulated',
-      stints: [
-        { compound: 'SOFT', laps: [simulatedLap(1, 0, 97.8)] },
-        { compound: 'HARD', laps: [simulatedLap(2, 0, 98.7)] },
-        { compound: 'HARD', laps: [simulatedLap(3, 0, 98.6), simulatedLap(4, 1, 98.4)] },
-      ],
-      stops: [
-        { in_lap: 1, pit_loss_s: 24.343 },
-        { in_lap: 2, pit_loss_s: 24.343 },
-      ],
-      total_s: 5571.562,
-      gap_to_fastest_s: 0,
-      caveats: ['pit_loss_not_reliable', 'one_dry_compound'],
-    },
-    { outcome: 'rejected', reason: 'compound_not_calibrated', stint_number: 1 },
+    ONE_STOP,
+    TWO_STOPS,
+    REJECTED,
     { outcome: 'rejected', reason: 'laps_do_not_add_up', stint_number: null },
   ],
   not_modelled: RACE_MODEL.not_modelled,

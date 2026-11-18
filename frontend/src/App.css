@@ -912,6 +912,46 @@ main {
   border-radius: 10px;
 }
 
+.lap-chart {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 1rem;
+}
+
+.lap-chart svg {
+  width: 100%;
+  height: auto;
+}
+
+.lap-chart .grid {
+  stroke: var(--line);
+}
+
+.lap-chart text {
+  fill: var(--faint);
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.trace {
+  stroke: var(--series);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.trace--dashed {
+  stroke-dasharray: 4 4;
+}
+
+.stop {
+  fill: var(--bg);
+  stroke: var(--series);
+  stroke-width: 2;
+}
+
 @media (max-width: 48rem) {
   .race-setup,
   .results {

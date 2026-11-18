@@ -10,6 +10,7 @@ import {
   RACE,
   RACE_MODEL,
   SIMULATION,
+  TWO_STOPS,
   type Route,
 } from '../testing.ts'
 import { SimulatorScreen } from './SimulatorScreen.tsx'
@@ -222,11 +223,10 @@ describe('SimulatorScreen', () => {
   })
 
   it('says a strategy that stops nowhere has no stop', async () => {
-    const [, twoStops] = SIMULATION.results
     renderScreen({
       ...API,
       'POST /api/simulations': () =>
-        json({ ...SIMULATION, results: [{ ...twoStops, stops: [], caveats: [] }] }),
+        json({ ...SIMULATION, results: [{ ...TWO_STOPS, stops: [], caveats: [] }] }),
     })
     await strategy(1)
 
