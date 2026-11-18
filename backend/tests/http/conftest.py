@@ -12,7 +12,7 @@ from f1_strategy.adapters.http.app import create_app
 from f1_strategy.adapters.http.services import ApiServices, api_services
 from f1_strategy.adapters.migrate import upgrade
 from f1_strategy.adapters.settings import ApiSettings
-from tests.http.api import SHORT_RACE, flush, load
+from tests.http.api import SHORT_RACE, calibrate, flush, load
 from tests.postgres import CONNECT_TIMEOUT_S, fresh_database
 
 
@@ -48,3 +48,10 @@ def client(settings: ApiSettings) -> Iterator[TestClient]:
     options = {"loop_factory": asyncio.SelectorEventLoop}
     with TestClient(create_app(services), backend_options=options) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def calibrated(settings: ApiSettings) -> None:
+    """The race of the sample calibrated on the ten-lap model of the strategy tests."""
+    postgres_uri = settings.postgres_uri.get_secret_value()
+    asyncio.run(calibrate(postgres_uri), loop_factory=asyncio.SelectorEventLoop)

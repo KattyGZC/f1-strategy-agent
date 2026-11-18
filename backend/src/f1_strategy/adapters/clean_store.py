@@ -1,12 +1,14 @@
 """The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), the
-read of a session's rows for its replay (ADR 0009), the catalog of loaded sessions, and each
-race's calibration with its pit loss (ADR 0014, ADR 0015)."""
+read of a session's rows for its replay (ADR 0009), the catalog of loaded sessions, each
+race's calibration with its pit loss (ADR 0014, ADR 0015), and its read for the simulator
+(ADR 0017)."""
 
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from dataclasses import astuple, dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import LiteralString
 
 from psycopg import AsyncConnection, Error, OperationalError, sql
 from psycopg.rows import TupleRow, class_row
@@ -24,6 +26,7 @@ from f1_strategy.application.calibration import (
 )
 from f1_strategy.application.readiness import DependencyUnavailableError
 from f1_strategy.application.sessions import LoadedSession, SessionDriver, SessionEntry
+from f1_strategy.application.simulation import CalibratedRace
 from f1_strategy.application.transform import (
     ErrorKind,
     Load,
@@ -52,12 +55,15 @@ from f1_strategy.domain.clean import (
 from f1_strategy.domain.clean_laps import ExclusionReason
 from f1_strategy.domain.lap_time_model import (
     Calibration,
+    CompoundFit,
+    DriverPace,
     Exclusion,
     NotCalibrated,
     NotCalibratedReason,
+    TrackTemperature,
 )
 from f1_strategy.domain.openf1 import SessionName, SessionType
-from f1_strategy.domain.pit_loss import PitStopExclusionReason
+from f1_strategy.domain.pit_loss import PitLoss, PitStopExclusion, PitStopExclusionReason
 
 type Pool = AsyncConnectionPool[AsyncConnection[TupleRow]]
 
@@ -102,6 +108,35 @@ RACE_HASH_QUERY = "SELECT loaded_output_hash FROM transform_run WHERE session_ke
 STORED_CALIBRATIONS_QUERY = """
     SELECT session_key, status, clean_output_hash, calibration_version
     FROM calibration_run WHERE session_key = ANY(%s)
+"""
+# A race has a `calibration` row only while its run is calibrated: every save deletes it first.
+CALIBRATED_RACES_QUERY = """
+    SELECT s.session_key, s.date_start, m.year, m.meeting_name, m.circuit_short_name,
+        m.country_name, c.race_laps
+    FROM calibration c JOIN session s USING (session_key) JOIN meeting m USING (meeting_key)
+    ORDER BY s.date_start, s.session_key
+"""
+CALIBRATION_QUERY = """
+    SELECT race_laps, residual_rmse_s, track_temperature_min_c, track_temperature_median_c,
+        track_temperature_max_c, rain_readings
+    FROM calibration WHERE session_key = %s
+"""
+COMPOUNDS_QUERY = """
+    SELECT compound, base_s, degradation_s_per_lap, progress_s_per_lap, residual_rmse_s,
+        clean_laps, min_tyre_age_laps, max_tyre_age_laps
+    FROM calibration_compound WHERE session_key = %s ORDER BY compound
+"""
+CALIBRATED_DRIVERS_QUERY = """
+    SELECT driver_number, pace_offset_s, clean_laps
+    FROM calibration_driver WHERE session_key = %s ORDER BY driver_number
+"""
+EXCLUSIONS_QUERY = """
+    SELECT reason, laps FROM calibration_exclusion WHERE session_key = %s ORDER BY reason
+"""
+PIT_LOSS_QUERY = "SELECT pit_loss_s, stops FROM calibration_pit_loss WHERE session_key = %s"
+PIT_STOP_EXCLUSIONS_QUERY = """
+    SELECT reason, stops FROM calibration_pit_stop_exclusion WHERE session_key = %s
+    ORDER BY reason
 """
 SAVE_RUN = """
     INSERT INTO calibration_run AS run (session_key, status, clean_output_hash,
@@ -481,6 +516,58 @@ class PostgresCalibrationStore:
                 await _insert_calibration(connection, session_key, result)
             if not isinstance(result, CalibrationFailed):
                 await _insert_exclusions(connection, session_key, result.exclusions)
+
+
+class PostgresCalibratedRaces:
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def races(self) -> tuple[CalibratedRace, ...]:
+        async with (
+            self._pool.connection() as connection,
+            connection.cursor(row_factory=class_row(CalibratedRace)) as cursor,
+        ):
+            await cursor.execute(CALIBRATED_RACES_QUERY)
+            return tuple(await cursor.fetchall())
+
+    async def calibration(self, session_key: int) -> Calibration | None:
+        """The calibration from one snapshot, so a save that commits while it is read is seen
+        whole or not at all. Each table is read in the order the calibration was built in:
+        the enum order of compounds and reasons, and drivers by number."""
+        async with self._pool.connection() as connection, connection.transaction():
+            await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            cursor = await connection.execute(CALIBRATION_QUERY, [session_key])
+            row = await cursor.fetchone()
+            if row is None:
+                return None
+            await _register_enums(connection, CALIBRATION_ENUM_TYPES)
+            read = _CalibrationReader(connection, session_key)
+            pit_loss = await read(PitLoss, PIT_LOSS_QUERY)
+            race_laps, residual_rmse_s, *temperature, rain_readings = row
+            return Calibration(
+                race_laps=race_laps,
+                compounds=await read(CompoundFit, COMPOUNDS_QUERY),
+                drivers=await read(DriverPace, CALIBRATED_DRIVERS_QUERY),
+                residual_rmse_s=residual_rmse_s,
+                exclusions=await read(Exclusion, EXCLUSIONS_QUERY),
+                track_temperature=(
+                    None if temperature[0] is None else TrackTemperature(*temperature)
+                ),
+                rain_readings=rain_readings,
+                pit_loss=pit_loss[0] if pit_loss else None,
+                pit_stop_exclusions=await read(PitStopExclusion, PIT_STOP_EXCLUSIONS_QUERY),
+            )
+
+
+class _CalibrationReader:
+    def __init__(self, connection: AsyncConnection[TupleRow], session_key: int) -> None:
+        self._connection = connection
+        self._session_key = session_key
+
+    async def __call__[T](self, row_type: type[T], query: LiteralString) -> tuple[T, ...]:
+        async with self._connection.cursor(row_factory=class_row(row_type)) as cursor:
+            await cursor.execute(query, [self._session_key])
+            return tuple(await cursor.fetchall())
 
 
 def _run_row(
