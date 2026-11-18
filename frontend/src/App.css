@@ -196,6 +196,30 @@ fieldset {
   background: repeating-conic-gradient(var(--text) 0 25%, var(--bg) 0 50%) 0 0 / 0.5rem 0.5rem;
 }
 
+.screen-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: 1.5rem;
+}
+
+.screen-tabs [role='tab'] {
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.screen-tabs [role='tab'][aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
 .api-status {
   margin-left: auto;
   font-size: 0.875rem;
@@ -381,6 +405,16 @@ main {
 }
 
 @media (max-width: 48rem) {
+  .app-header {
+    flex-wrap: wrap;
+  }
+
+  .screen-tabs {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+
   .picker,
   .replay-grid {
     grid-template-columns: minmax(0, 1fr);
