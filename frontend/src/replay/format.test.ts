@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatClock, formatGap, formatLapTime, formatOptional } from './format.ts'
+import { formatClock, formatGap, formatLapTime, formatOptional, formatRaceTime } from './format.ts'
 
 describe('format', () => {
   it.each([
@@ -21,6 +21,14 @@ describe('format', () => {
     [7.2, '0:07.200'],
   ])('prints the lap time %s as %s', (durationS, printed) => {
     expect(formatLapTime(durationS)).toBe(printed)
+  })
+
+  it.each([
+    [5588.697, '1:33:08.697'],
+    [3599.9996, '1:00:00.000'],
+    [59.5, '0:00:59.500'],
+  ])('prints a race of %s s as %s', (durationS, printed) => {
+    expect(formatRaceTime(durationS)).toBe(printed)
   })
 
   it('prints the UTC time of day of an instant', () => {

@@ -227,3 +227,78 @@ export const TEAM_RADIO: Schemas['TeamRadioEvent'] = {
   driver_number: 1,
   recording_url: 'https://livetiming.formula1.com/radio.mp3',
 }
+
+export const RACE: Schemas['RaceResponse'] = {
+  session_key: SESSION.session_key,
+  date_start: SESSION.date_start,
+  year: 2024,
+  meeting_name: 'Bahrain Grand Prix',
+  circuit_short_name: 'Sakhir',
+  country_name: 'Bahrain',
+  race_laps: 57,
+}
+
+export const RACE_MODEL: Schemas['RaceModelResponse'] = {
+  session_key: SESSION.session_key,
+  race_laps: 57,
+  compounds: [
+    { compound: 'SOFT', min_tyre_age_laps: 1, max_tyre_age_laps: 20, residual_rmse_s: 0.482883 },
+    { compound: 'HARD', min_tyre_age_laps: 1, max_tyre_age_laps: 29, residual_rmse_s: 0.441294 },
+  ],
+  driver_numbers: [1, 16],
+  residual_rmse_s: 0.453584,
+  pit_loss: { pit_loss_s: 24.343, stops: 42, reliable: true },
+  track_temperature: { min_c: 21.9, median_c: 22.8, max_c: 23.8 },
+  rain_readings: 0,
+  not_modelled: [
+    'standing_start',
+    'starting_fuel',
+    'wind',
+    'driver_aggressiveness',
+    'track_temperature',
+  ],
+}
+
+function simulatedLap(lapNumber: number, tyreAge: number, lapTimeS: number) {
+  return {
+    lap_number: lapNumber,
+    tyre_age_laps: tyreAge,
+    lap_time_s: lapTimeS,
+    extrapolated: false,
+  }
+}
+
+/** A one-stop strategy against a two-stop one, as the API answered them for Bahrain 2024. */
+export const SIMULATION: Schemas['SimulationResponse'] = {
+  results: [
+    {
+      outcome: 'simulated',
+      stints: [
+        { compound: 'SOFT', laps: [simulatedLap(1, 0, 97.8), simulatedLap(2, 1, 97.9)] },
+        { compound: 'HARD', laps: [simulatedLap(3, 0, 98.6), simulatedLap(4, 1, 98.5)] },
+      ],
+      stops: [{ in_lap: 2, pit_loss_s: 24.343 }],
+      total_s: 5588.697,
+      gap_to_fastest_s: 17.135,
+      caveats: ['extrapolated_tyre_age'],
+    },
+    {
+      outcome: 'simulated',
+      stints: [
+        { compound: 'SOFT', laps: [simulatedLap(1, 0, 97.8)] },
+        { compound: 'HARD', laps: [simulatedLap(2, 0, 98.7)] },
+        { compound: 'HARD', laps: [simulatedLap(3, 0, 98.6), simulatedLap(4, 1, 98.4)] },
+      ],
+      stops: [
+        { in_lap: 1, pit_loss_s: 24.343 },
+        { in_lap: 2, pit_loss_s: 24.343 },
+      ],
+      total_s: 5571.562,
+      gap_to_fastest_s: 0,
+      caveats: ['pit_loss_not_reliable', 'one_dry_compound'],
+    },
+    { outcome: 'rejected', reason: 'compound_not_calibrated', stint_number: 1 },
+    { outcome: 'rejected', reason: 'laps_do_not_add_up', stint_number: null },
+  ],
+  not_modelled: RACE_MODEL.not_modelled,
+}

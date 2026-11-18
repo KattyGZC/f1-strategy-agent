@@ -3,6 +3,7 @@ import type { Gap } from './fold.ts'
 export const NOTHING = '-'
 const MS_PER_S = 1000
 const MS_PER_MINUTE = 60 * MS_PER_S
+const MS_PER_HOUR = 60 * MS_PER_MINUTE
 
 export function formatGap(gap: Gap | null): string {
   if (gap === null) {
@@ -24,6 +25,15 @@ export function formatLapTime(durationS: number | null): string {
   const minutes = Math.floor(durationMs / MS_PER_MINUTE)
   const seconds = ((durationMs % MS_PER_MINUTE) / MS_PER_S).toFixed(3).padStart(6, '0')
   return `${minutes}:${seconds}`
+}
+
+/** A race's length in seconds with its hours, such as 1:33:08.697. */
+export function formatRaceTime(durationS: number): string {
+  const durationMs = Math.round(durationS * MS_PER_S)
+  const hours = Math.floor(durationMs / MS_PER_HOUR)
+  const minutes = String(Math.floor((durationMs % MS_PER_HOUR) / MS_PER_MINUTE)).padStart(2, '0')
+  const seconds = ((durationMs % MS_PER_MINUTE) / MS_PER_S).toFixed(3).padStart(6, '0')
+  return `${hours}:${minutes}:${seconds}`
 }
 
 /** A duration under a minute, such as a sector time: 29.123. */
