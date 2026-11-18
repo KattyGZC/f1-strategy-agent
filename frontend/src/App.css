@@ -995,4 +995,14 @@ main {
   .race-model {
     position: static;
   }
+
+  /* Scaled down to a phone, the axis labels would shrink to half their size; the chart scrolls
+     within its panel instead. */
+  .lap-chart {
+    overflow-x: auto;
+  }
+
+  .lap-chart svg {
+    min-width: 40rem;
+  }
 }
