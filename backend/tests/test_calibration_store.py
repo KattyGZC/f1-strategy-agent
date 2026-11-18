@@ -10,6 +10,7 @@ from psycopg import errors
 
 from f1_strategy.adapters.clean_store import (
     Pool,
+    PostgresCalibratedRaces,
     PostgresCalibrationStore,
     PostgresCleanStore,
     connection_pool,
@@ -25,6 +26,7 @@ from f1_strategy.application.calibration import (
     RaceOutcome,
     StoredCalibration,
 )
+from f1_strategy.application.simulation import CalibratedRace
 from f1_strategy.application.transform import Load, Version
 from f1_strategy.domain.clean import CleanSession, Compound, clean_session, content_hash
 from f1_strategy.domain.clean_laps import ExclusionReason
@@ -256,6 +258,68 @@ async def test_reloading_the_session_drops_its_calibration(
     assert rows(postgres_uri, "SELECT (SELECT count(*) FROM calibration_compound), "
                 "(SELECT count(*) FROM calibration_driver), "
                 "(SELECT count(*) FROM calibration_pit_loss)") == [(0, 0, 0)]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    "calibration",
+    [
+        pytest.param(CALIBRATION, id="whole"),
+        pytest.param(replace(CALIBRATION, pit_loss=None), id="no pit loss"),
+        pytest.param(replace(CALIBRATION, track_temperature=None), id="no track temperature"),
+        pytest.param(
+            replace(CALIBRATION, exclusions=(), pit_stop_exclusions=()), id="no exclusions"
+        ),
+    ],
+)
+@pytest.mark.anyio
+async def test_a_saved_calibration_reads_back_as_it_was_saved(
+    store: PostgresCalibrationStore, pool: Pool, calibration: Calibration
+) -> None:
+    await store.save(RACE_KEY, FINGERPRINT, calibration, NOW)
+
+    assert await PostgresCalibratedRaces(pool).calibration(RACE_KEY) == calibration
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        pytest.param(None, id="never calibrated"),
+        pytest.param(NOT_CALIBRATED, id="not calibrated"),
+        pytest.param(CalibrationFailed("bad message"), id="failed"),
+    ],
+)
+@pytest.mark.anyio
+async def test_a_race_without_a_calibration_reads_as_none(
+    store: PostgresCalibrationStore, pool: Pool, result: NotCalibrated | CalibrationFailed | None
+) -> None:
+    await store.save(RACE_KEY, FINGERPRINT, CALIBRATION, NOW)
+    if result is None:
+        await load(pool, RACE_SESSION)
+    else:
+        await store.save(RACE_KEY, FINGERPRINT, result, NOW)
+
+    assert await PostgresCalibratedRaces(pool).calibration(RACE_KEY) is None
+    assert await PostgresCalibratedRaces(pool).races() == ()
+
+
+@pytest.mark.anyio
+async def test_the_calibrated_races_are_listed_with_their_meeting(
+    store: PostgresCalibrationStore, pool: Pool
+) -> None:
+    await store.save(RACE_KEY, FINGERPRINT, CALIBRATION, NOW)
+
+    meeting = RACE_SESSION.meeting
+    assert await PostgresCalibratedRaces(pool).races() == (
+        CalibratedRace(
+            session_key=RACE_KEY,
+            date_start=RACE_SESSION.session.date_start,
+            year=meeting.year,
+            meeting_name=meeting.meeting_name,
+            circuit_short_name=meeting.circuit_short_name,
+            country_name=meeting.country_name,
+            race_laps=CALIBRATION.race_laps,
+        ),
+    )
 
 
 @pytest.mark.anyio
