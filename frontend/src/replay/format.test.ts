@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatClock, formatGap, formatLapTime, formatOptional } from './format.ts'
+import { formatClock, formatGap, formatOptional } from './format.ts'
 
 describe('format', () => {
   it.each([
@@ -11,16 +11,6 @@ describe('format', () => {
     [{ unit: 'laps', value: 2 } as const, '+2 LAPS'],
   ])('prints the gap %j as %s', (gap, printed) => {
     expect(formatGap(gap)).toBe(printed)
-  })
-
-  it.each([
-    [null, '-'],
-    [92.608, '1:32.608'],
-    [65.05, '1:05.050'],
-    [59.9999, '1:00.000'],
-    [7.2, '0:07.200'],
-  ])('prints the lap time %s as %s', (durationS, printed) => {
-    expect(formatLapTime(durationS)).toBe(printed)
   })
 
   it('prints the UTC time of day of an instant', () => {

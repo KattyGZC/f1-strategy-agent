@@ -4,7 +4,7 @@ import type { ApiClient } from '../api/client.ts'
 import { REPLAY_SPEEDS, type ReplaySpeed } from '../api/closedSets.ts'
 import { failureMessage, UNREACHABLE } from '../api/errors.ts'
 import type { components } from '../api/schema.ts'
-import { formatDate } from './format.ts'
+import { formatDate } from '../format.ts'
 import { SpeedButtons } from './SpeedButtons.tsx'
 
 type Session = components['schemas']['SessionResponse']

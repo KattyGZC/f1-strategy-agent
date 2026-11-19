@@ -24,9 +24,10 @@ Done:
 3. **Replay.** Any session of the clean model replays as if live: a pure timeline of its rows, paced by a producer task into a Redis stream per replay and read by the browser over SSE, resuming after `Last-Event-ID`. The viewer starts, pauses, resumes, changes the speed, seeks to a lap (a new generation of the stream that starts with a reset) and stops it; replays are bounded in number and expire when idle. The replay screen folds the events into the timing tower, the followed driver, the weather and race control. Decisions: ADR 0009, ADR 0011, ADR 0012, ADR 0013.
 4. **Predictive engine.** `make calibrate YEAR=...` fits, per Race session, a lap-time model on its clean laps (a base and a degradation slope per compound, a progress slope shared by the dry compounds and one for intermediates, driver offsets as fixed effects) by exact least squares in the pure domain, and stores it in PostgreSQL; each excluded lap has a named reason. `predict_stint` gives a stint's lap times from it. A reconciling sweep: a race is skipped while its transform output hash and `CALIBRATION_VERSION` are unchanged, and a reload of the session drops its calibration by cascade. Golden cases hold out a race winner's stint from 2024 races. Decisions: ADR 0014.
 
+5. **Simulator.** Each race's pit loss is measured on its own stops (ADR 0015). `POST /api/simulations` simulates 1 to 4 strategies of stints on a race's stored calibration, for a driver or the average car, in the pure domain: each lap is the model's prediction, each stop adds the pit loss, a strategy the race cannot run is rejected with its reason, and each result names its caveats and what the model leaves out (ADR 0017). `GET /api/races` and `GET /api/races/{session_key}` give the form its options. Every request is traceable by one id, and nginx bounds bodies and rates, tighter for simulations (ADR 0016). The Simulator tab builds the strategies and shows the results and a lap-time chart; the screens are tabs in the URL (ADR 0018).
+
 Next, in order. Each phase is planned in the session that starts it and recorded in the devlog.
 
-5. **Simulator API and UI.**
 6. **Assistant.** Retrieval over facts and rules, tools (stats query, semantic search, simulation), streaming answers with citations.
 7. **Production.** Deploy on merge, observability, a public demo.
 

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
 import { towerRows, type DriverTiming, type SessionDriver } from './fold.ts'
-import { formatGap, formatLapTime, formatOptional, formatPitLap } from './format.ts'
+import { formatLapTime } from '../format.ts'
+import { formatGap, formatOptional, formatPitLap } from './format.ts'
 import { TyreBadge } from './TyreBadge.tsx'
 
 type GapMode = 'interval' | 'leader'

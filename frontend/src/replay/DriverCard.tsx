@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 
 import type { DriverTiming, SessionDriver } from './fold.ts'
-import { formatGap, formatLapTime, formatOptional, formatPitLap, formatSeconds } from './format.ts'
+import { formatLapTime, formatSeconds } from '../format.ts'
+import { formatGap, formatOptional, formatPitLap } from './format.ts'
 import { TyreBadge } from './TyreBadge.tsx'
 
 interface Props {

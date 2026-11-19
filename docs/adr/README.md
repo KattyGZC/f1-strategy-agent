@@ -21,6 +21,8 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0015](0015-pit-loss-from-neighbouring-laps.md) | Pit loss is measured per race against the driver's neighbouring laps | Accepted |
 | [0016](0016-request-tracing-and-edge-limits.md) | Every request is traceable by one id, and the edge bounds what reaches the API | Accepted |
 | [0017](0017-strategy-simulation-in-the-race-it-was-calibrated-on.md) | A strategy is simulated in the race it was calibrated on, from the model alone | Accepted |
+| [0018](0018-screens-state-and-charts-in-the-frontend.md) | Screens are tabs in the URL, state stays in React, charts are drawn in SVG | Accepted |
+| [0019](0019-the-edge-says-how-long-a-browser-keeps-each-file.md) | The edge says how long a browser keeps each file | Accepted |
 
 ## Template
 

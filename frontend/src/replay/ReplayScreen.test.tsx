@@ -10,6 +10,7 @@ import {
   json,
   REPLAY,
   SESSION,
+  abortable,
   type Route,
 } from '../testing.ts'
 import { ReplayScreen } from './ReplayScreen.tsx'
@@ -33,12 +34,6 @@ const API: Record<string, Route> = {
   'POST /api/replays': () => json(REPLAY, 201),
   'DELETE /api/replays/replay-1': () => new Response(null, { status: 204 }),
 }
-
-/** Rejects as fetch does when its request is aborted. */
-const abortable: Route = (request) =>
-  new Promise((_, reject) =>
-    request.signal.addEventListener('abort', () => reject(new DOMException('', 'AbortError'))),
-  )
 
 function renderScreen(routes: Record<string, Route> = API) {
   const api = fakeApi(routes)
