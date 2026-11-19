@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent } from 'react'
 
-import { panelId, SCREEN_LABEL, SCREENS, screenAfter, tabId, type Screen } from './screens.ts'
+import { panelId, SCREEN_LABEL, SCREENS, screenForKey, tabId, type Screen } from './screens.ts'
 
 interface Props {
   screen: Screen
@@ -18,13 +18,8 @@ export function ScreenTabs({ screen, onSelect }: Readonly<Props>) {
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    const next = {
-      ArrowRight: screenAfter(screen, 1),
-      ArrowLeft: screenAfter(screen, -1),
-      Home: SCREENS[0],
-      End: SCREENS.at(-1),
-    }[event.key]
-    if (next !== undefined) {
+    const next = screenForKey(screen, event.key)
+    if (next !== null) {
       event.preventDefault()
       open(next)
     }

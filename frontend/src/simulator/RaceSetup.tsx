@@ -33,32 +33,8 @@ export function RaceSetup({ client, race }: Readonly<Props>) {
 
   useEffect(() => {
     const controller = new AbortController()
-    const params = {
-      params: { path: { session_key: race.session_key } },
-      signal: controller.signal,
-    }
-    Promise.all([
-      client.GET('/api/races/{session_key}', params),
-      client.GET('/api/sessions/{session_key}', params),
-    ])
-      .then(([model, entry]) => {
-        if (!model.data) {
-          return setSetup({ kind: 'failed', message: failureMessage(model.error, model.response) })
-        }
-        if (!entry.data) {
-          return setSetup({ kind: 'failed', message: failureMessage(entry.error, entry.response) })
-        }
-        const [first, ...rest] = model.data.compounds
-        if (first === undefined) {
-          return setSetup({ kind: 'failed', message: 'the race has no calibrated compound' })
-        }
-        const named = new Map(entry.data.drivers.map((driver) => [driver.driver_number, driver]))
-        const drivers = model.data.driver_numbers.map((driverNumber) => ({
-          driverNumber,
-          name: named.get(driverNumber)?.full_name ?? `Car ${driverNumber}`,
-        }))
-        return setSetup({ kind: 'loaded', model: model.data, compounds: [first, ...rest], drivers })
-      })
+    loadSetup(client, race.session_key, controller.signal)
+      .then(setSetup)
       .catch(() => {
         if (!controller.signal.aborted) {
           setSetup({ kind: 'failed', message: UNREACHABLE })
@@ -89,6 +65,35 @@ export function RaceSetup({ client, race }: Readonly<Props>) {
         </div>
       )
   }
+}
+
+/** The race's model and its session's drivers, read together; either failing fails the setup. */
+async function loadSetup(
+  client: ApiClient,
+  sessionKey: number,
+  signal: AbortSignal,
+): Promise<SetupState> {
+  const params = { params: { path: { session_key: sessionKey } }, signal }
+  const [model, entry] = await Promise.all([
+    client.GET('/api/races/{session_key}', params),
+    client.GET('/api/sessions/{session_key}', params),
+  ])
+  if (!model.data) {
+    return { kind: 'failed', message: failureMessage(model.error, model.response) }
+  }
+  if (!entry.data) {
+    return { kind: 'failed', message: failureMessage(entry.error, entry.response) }
+  }
+  const [first, ...rest] = model.data.compounds
+  if (first === undefined) {
+    return { kind: 'failed', message: 'the race has no calibrated compound' }
+  }
+  const named = new Map(entry.data.drivers.map((driver) => [driver.driver_number, driver]))
+  const drivers = model.data.driver_numbers.map((driverNumber) => ({
+    driverNumber,
+    name: named.get(driverNumber)?.full_name ?? `Car ${driverNumber}`,
+  }))
+  return { kind: 'loaded', model: model.data, compounds: [first, ...rest], drivers }
 }
 
 function RaceModelPanel({ race, model }: Readonly<{ race: Race; model: RaceModel }>) {

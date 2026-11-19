@@ -30,6 +30,22 @@ export function screenAfter(screen: Screen, steps: number): Screen {
   return SCREENS[index] ?? DEFAULT_SCREEN
 }
 
+/** The tab a key opens from `screen` (WAI-ARIA tabs), or null for a key the tabs leave alone. */
+export function screenForKey(screen: Screen, key: string): Screen | null {
+  switch (key) {
+    case 'ArrowRight':
+      return screenAfter(screen, 1)
+    case 'ArrowLeft':
+      return screenAfter(screen, -1)
+    case 'Home':
+      return SCREENS[0]
+    case 'End':
+      return screenAfter(SCREENS[0], -1)
+    default:
+      return null
+  }
+}
+
 function subscribe(onChange: () => void): () => void {
   window.addEventListener('hashchange', onChange)
   return () => window.removeEventListener('hashchange', onChange)

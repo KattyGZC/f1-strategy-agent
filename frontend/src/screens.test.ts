@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { hashOf, screenAfter, screenOf } from './screens.ts'
+import { hashOf, screenAfter, screenForKey, screenOf } from './screens.ts'
 
 describe('the screens', () => {
   it.each([
@@ -24,5 +24,16 @@ describe('the screens', () => {
     ['simulator', -3, 'replay'],
   ] as const)('go from the %s %i tabs to the %s', (from, steps, to) => {
     expect(screenAfter(from, steps)).toBe(to)
+  })
+
+  it.each([
+    ['replay', 'ArrowRight', 'simulator'],
+    ['replay', 'ArrowLeft', 'simulator'],
+    ['simulator', 'Home', 'replay'],
+    ['replay', 'End', 'simulator'],
+    ['replay', 'Enter', null],
+    ['simulator', 'a', null],
+  ] as const)('open from the %s on %s the %s', (from, key, to) => {
+    expect(screenForKey(from, key)).toBe(to)
   })
 })

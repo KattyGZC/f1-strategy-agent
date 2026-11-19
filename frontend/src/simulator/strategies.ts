@@ -48,16 +48,8 @@ export function newBench(compound: Compound, raceLaps: number): Bench {
 
 export function benchReducer(bench: Bench, action: BenchAction): Bench {
   switch (action.type) {
-    case 'add_strategy': {
-      if (bench.strategies.length >= MAX_STRATEGIES) {
-        return bench
-      }
-      const strategy = {
-        id: bench.nextId,
-        stints: [stint(bench.nextId + 1, bench.compound, String(bench.raceLaps))] as const,
-      }
-      return { ...bench, nextId: bench.nextId + 2, strategies: [...bench.strategies, strategy] }
-    }
+    case 'add_strategy':
+      return addStrategy(bench)
     case 'remove_strategy':
       return {
         ...bench,
@@ -67,14 +59,7 @@ export function benchReducer(bench: Bench, action: BenchAction): Bench {
         ),
       }
     case 'add_stint':
-      return {
-        ...editStrategy(bench, action.strategyId, (stints) =>
-          stints.length >= MAX_STINTS
-            ? stints
-            : [...stints, stint(bench.nextId, bench.compound, '')],
-        ),
-        nextId: bench.nextId + 1,
-      }
+      return addStint(bench, action.strategyId)
     case 'remove_stint':
       return editStrategy(bench, action.strategyId, (stints) =>
         orKept(
@@ -91,6 +76,28 @@ export function benchReducer(bench: Bench, action: BenchAction): Bench {
           stints,
         ),
       )
+  }
+}
+
+/** A new strategy runs the whole race on the bench's compound, as the first one does. */
+function addStrategy(bench: Bench): Bench {
+  if (bench.strategies.length >= MAX_STRATEGIES) {
+    return bench
+  }
+  const strategy = {
+    id: bench.nextId,
+    stints: [stint(bench.nextId + 1, bench.compound, String(bench.raceLaps))] as const,
+  }
+  return { ...bench, nextId: bench.nextId + 2, strategies: [...bench.strategies, strategy] }
+}
+
+/** A new stint waits for the viewer to type its laps. */
+function addStint(bench: Bench, strategyId: number): Bench {
+  return {
+    ...editStrategy(bench, strategyId, (stints) =>
+      stints.length >= MAX_STINTS ? stints : [...stints, stint(bench.nextId, bench.compound, '')],
+    ),
+    nextId: bench.nextId + 1,
   }
 }
 
