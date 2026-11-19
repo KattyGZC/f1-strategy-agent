@@ -23,6 +23,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-11-12 | [02. Phase 4 predictive engine](2026-11-12-02-phase-4-predictive-engine.md) |
 | 2026-11-15 | [01. Pit loss and request tracing](2026-11-15-01-pit-loss-and-request-tracing.md) |
 | 2026-11-16 | [01. Edge limits and strategy simulation](2026-11-16-01-edge-limits-and-strategy-simulation.md) |
+| 2026-11-18 | [01. Phase 5: the simulator API and screen](2026-11-18-01-phase-5-simulator-api-and-screen.md) |
 
 ## Template
 
