@@ -1,6 +1,6 @@
 import type { Dispatch } from 'react'
 
-import { COMPOUND_LOOK } from '../replay/look.ts'
+import { COMPOUND_LOOK } from '../look.ts'
 import { MAX_STINTS, MAX_STRATEGIES, MAX_TYRE_AGE_LAPS } from './bounds.ts'
 import {
   lapsTyped,

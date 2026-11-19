@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import type { ApiClient } from '../api/client.ts'
 import { failureMessage, UNREACHABLE } from '../api/errors.ts'
 import type { components } from '../api/schema.ts'
-import { formatDate } from '../replay/format.ts'
+import { formatDate } from '../format.ts'
 import { RaceSetup } from './RaceSetup.tsx'
 
 type Race = components['schemas']['RaceResponse']

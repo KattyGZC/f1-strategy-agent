@@ -1,5 +1,5 @@
 import type { components } from '../api/schema.ts'
-import { formatRaceTime, formatSeconds } from '../replay/format.ts'
+import { formatRaceTime, formatSeconds } from '../format.ts'
 import { CAVEAT_LABEL, NOT_MODELLED_LABEL, REJECTION_LABEL } from './labels.ts'
 import { LapChart, type Series } from './LapChart.tsx'
 

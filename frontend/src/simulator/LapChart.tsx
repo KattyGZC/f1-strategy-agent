@@ -1,5 +1,5 @@
 import type { components } from '../api/schema.ts'
-import { formatLapTime } from '../replay/format.ts'
+import { formatLapTime } from '../format.ts'
 import { axisOf, position, type Axis } from './chartScale.ts'
 
 type Simulated = components['schemas']['SimulatedResponse']

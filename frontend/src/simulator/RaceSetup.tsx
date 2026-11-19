@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react'
 import type { ApiClient } from '../api/client.ts'
 import { failureMessage, UNREACHABLE } from '../api/errors.ts'
 import type { components } from '../api/schema.ts'
-import { COMPOUND_LOOK } from '../replay/look.ts'
-import { formatSeconds } from '../replay/format.ts'
+import { COMPOUND_LOOK } from '../look.ts'
+import { formatSeconds } from '../format.ts'
 import { StrategyBench, type Driver } from './StrategyBench.tsx'
 
 type Schemas = components['schemas']

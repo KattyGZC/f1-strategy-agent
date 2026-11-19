@@ -1,6 +1,6 @@
 import type { LapEvent } from './fold.ts'
-import { NOTHING } from './format.ts'
-import { COMPOUND_LOOK } from './look.ts'
+import { NOTHING } from '../format.ts'
+import { COMPOUND_LOOK } from '../look.ts'
 
 /** The compound of the lap's stint as a coloured ring, and the tyre's age in laps. */
 export function TyreBadge({ lap }: Readonly<{ lap: LapEvent | null }>) {

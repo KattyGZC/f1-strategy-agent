@@ -1,6 +1,7 @@
 import type { components } from '../api/schema.ts'
 import type { Flag } from './fold.ts'
-import { formatClock, formatDate, formatOptional } from './format.ts'
+import { formatDate } from '../format.ts'
+import { formatClock, formatOptional } from './format.ts'
 import { FLAG_LOOK } from './look.ts'
 import type { StreamLink } from './stream.ts'
 
