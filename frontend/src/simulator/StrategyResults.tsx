@@ -50,9 +50,8 @@ function SimulatedCard({ number, result }: Readonly<{ number: number; result: Si
   const fastest = result.gap_to_fastest_s === 0
   return (
     <article
-      className={`panel result series--${number}`}
+      className={`panel result series--${number}${fastest ? ' result--fastest' : ''}`}
       aria-label={`Strategy ${number}`}
-      aria-current={fastest}
     >
       <div className="panel-head">
         <h3>Strategy {number}</h3>

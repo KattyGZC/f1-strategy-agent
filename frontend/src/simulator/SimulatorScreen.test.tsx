@@ -191,7 +191,6 @@ describe('SimulatorScreen', () => {
       'Some laps run a tyre older or newer than any the race calibrated',
     )
     const twoStops = results.getByRole('article', { name: 'Strategy 2' })
-    expect(twoStops).toHaveAttribute('aria-current', 'true')
     expect(within(twoStops).getByText('Fastest')).toBeInTheDocument()
     expect(
       within(twoStops).getByText('Stop on lap 1, 24.343 s; Stop on lap 2, 24.343 s'),

@@ -15,7 +15,8 @@ interface Props {
 
 export default function App({ apiClient, openStream }: Readonly<Props>) {
   const [screen, openScreen] = useScreen()
-  // A screen stays mounted once opened, so a replay keeps playing while the simulator is open.
+  // Every panel exists, so each tab controls one; a screen mounts when first opened and stays,
+  // so a replay keeps playing while the simulator is open.
   const [opened, setOpened] = useState<ReadonlySet<Screen>>(() => new Set([screen]))
   if (!opened.has(screen)) {
     setOpened(new Set([...opened, screen]))
@@ -38,7 +39,7 @@ export default function App({ apiClient, openStream }: Readonly<Props>) {
         <HealthStatus client={apiClient} />
       </header>
       <main>
-        {SCREENS.filter((each) => opened.has(each)).map((each) => (
+        {SCREENS.map((each) => (
           <section
             key={each}
             role="tabpanel"
@@ -46,7 +47,7 @@ export default function App({ apiClient, openStream }: Readonly<Props>) {
             aria-labelledby={tabId(each)}
             hidden={each !== screen}
           >
-            {content[each]}
+            {opened.has(each) ? content[each] : null}
           </section>
         ))}
       </main>

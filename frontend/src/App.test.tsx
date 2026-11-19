@@ -50,12 +50,22 @@ describe('App', () => {
     expect(screen.getByRole('tabpanel', { name: 'Replay' })).toBeVisible()
   })
 
-  it('opens the screen its hash names', async () => {
-    renderApp('#/simulator')
+  it('opens the screen its hash names, and mounts no other until it is opened', async () => {
+    const requests = renderApp('#/simulator')
 
     expect(await screen.findByRole('heading', { name: 'Compare race strategies' })).toBeVisible()
     expect(screen.getByRole('tab', { name: 'Simulator' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.queryByRole('tabpanel', { name: 'Replay' })).not.toBeInTheDocument()
+    expect(count(requests, '/api/sessions')).toBe(0)
+  })
+
+  it('gives every tab the panel it controls', () => {
+    renderApp()
+
+    for (const tab of screen.getAllByRole('tab')) {
+      const panel = document.getElementById(tab.getAttribute('aria-controls') ?? '')
+      expect(panel).toHaveAttribute('role', 'tabpanel')
+      expect(panel).toHaveAttribute('aria-labelledby', tab.id)
+    }
   })
 
   it('opens a tab in the URL, and keeps the screen it leaves as it was', async () => {

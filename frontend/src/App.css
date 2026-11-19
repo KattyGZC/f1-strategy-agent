@@ -924,7 +924,7 @@ main {
   border-top: 4px solid var(--series);
 }
 
-.result[aria-current='true'] {
+.result--fastest {
   border-color: var(--accent);
   border-top-color: var(--series);
 }
