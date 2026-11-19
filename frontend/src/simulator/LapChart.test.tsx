@@ -92,6 +92,7 @@ describe('StrategyResults', () => {
     const { container } = render(
       <StrategyResults
         simulation={{ ...SIMULATION, results: [REJECTED, ONE_STOP, REJECTED, TWO_STOPS] }}
+        outdated={false}
       />,
     )
 
@@ -102,7 +103,7 @@ describe('StrategyResults', () => {
   })
 
   it('draws no chart when no strategy was simulated', () => {
-    render(<StrategyResults simulation={{ ...SIMULATION, results: [REJECTED] }} />)
+    render(<StrategyResults simulation={{ ...SIMULATION, results: [REJECTED] }} outdated={false} />)
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })

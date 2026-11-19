@@ -933,6 +933,10 @@ main {
   opacity: 0.8;
 }
 
+.results--outdated {
+  opacity: 0.5;
+}
+
 .caveats li {
   color: var(--muted);
   font-size: 0.875rem;

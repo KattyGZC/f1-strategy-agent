@@ -5,6 +5,7 @@ import {
   benchReducer,
   lapsTyped,
   newBench,
+  sameRequest,
   simulationRequest,
   type Bench,
   type BenchAction,
@@ -159,5 +160,23 @@ describe('the strategy bench', () => {
     )
 
     expect(lapsTyped(firstStrategy(typed))).toBe(50)
+  })
+
+  it('tells the request it sent from one the bench asks for after an edit', () => {
+    const bench = newBench('SOFT', 57)
+    const sent = simulationRequest(bench, SESSION_KEY, null)
+    const strategyId = firstStrategy(bench).id
+    const stintId = firstStrategy(bench).stints[0].id
+    const edited = apply(bench, {
+      type: 'edit_stint',
+      strategyId,
+      stintId,
+      field: { tyreAge: '1' },
+    })
+
+    expect(sent && sameRequest(sent, simulationRequest(bench, SESSION_KEY, null))).toBe(true)
+    expect(sent && sameRequest(sent, simulationRequest(edited, SESSION_KEY, null))).toBe(false)
+    expect(sent && sameRequest(sent, simulationRequest(bench, SESSION_KEY, 16))).toBe(false)
+    expect(sent && sameRequest(sent, null)).toBe(false)
   })
 })

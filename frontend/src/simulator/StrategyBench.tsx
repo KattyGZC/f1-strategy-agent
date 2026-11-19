@@ -1,12 +1,12 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useReducer, useState } from 'react'
 
 import type { ApiClient } from '../api/client.ts'
-import { failureMessage, UNREACHABLE } from '../api/errors.ts'
 import type { components } from '../api/schema.ts'
 import { MAX_TYRE_AGE_LAPS } from './bounds.ts'
-import { benchReducer, newBench, simulationRequest } from './strategies.ts'
+import { benchReducer, newBench, sameRequest, simulationRequest } from './strategies.ts'
 import { StrategyForm } from './StrategyForm.tsx'
 import { StrategyResults } from './StrategyResults.tsx'
+import { useSimulation, type Run } from './useSimulation.ts'
 
 type Schemas = components['schemas']
 type Compound = Schemas['CompoundResponse']
@@ -15,12 +15,6 @@ export interface Driver {
   driverNumber: number
   name: string
 }
-
-type Run =
-  | { kind: 'idle' }
-  | { kind: 'running' }
-  | { kind: 'done'; simulation: Schemas['SimulationResponse'] }
-  | { kind: 'failed'; message: string }
 
 const AVERAGE_CAR = ''
 
@@ -37,50 +31,18 @@ export function StrategyBench({ client, model, compounds, drivers }: Readonly<Pr
     newBench(compounds[0].compound, model.race_laps),
   )
   const [driver, setDriver] = useState(AVERAGE_CAR)
-  const [run, setRun] = useState<Run>({ kind: 'idle' })
-  const inFlight = useRef<AbortController | null>(null)
-  useEffect(() => () => inFlight.current?.abort(), [])
+  const [run, simulate] = useSimulation(client)
 
   const request = simulationRequest(
     bench,
     model.session_key,
     driver === AVERAGE_CAR ? null : Number(driver),
   )
-
-  const simulate = async (body: Schemas['SimulationRequest']) => {
-    const controller = new AbortController()
-    inFlight.current = controller
-    setRun({ kind: 'running' })
-    try {
-      const { data, error, response } = await client.POST('/api/simulations', {
-        body,
-        signal: controller.signal,
-      })
-      setRun(
-        data
-          ? { kind: 'done', simulation: data }
-          : { kind: 'failed', message: failureMessage(error, response) },
-      )
-    } catch {
-      if (!controller.signal.aborted) {
-        setRun({ kind: 'failed', message: UNREACHABLE })
-      }
-    }
-  }
+  const outdated = run.kind === 'done' && !sameRequest(run.sent, request)
 
   return (
     <section className="bench" aria-label="Strategies">
-      <label className="field">
-        <span className="label">Driver</span>
-        <select value={driver} onChange={(event) => setDriver(event.target.value)}>
-          <option value={AVERAGE_CAR}>The average car of the race</option>
-          {drivers.map(({ driverNumber, name }) => (
-            <option key={driverNumber} value={driverNumber}>
-              {driverNumber} {name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <DriverSelect drivers={drivers} value={driver} onChange={setDriver} />
       <StrategyForm
         bench={bench}
         compounds={compounds.map(({ compound }) => compound)}
@@ -90,7 +52,7 @@ export function StrategyBench({ client, model, compounds, drivers }: Readonly<Pr
         type="button"
         className="primary"
         disabled={request === null || run.kind === 'running'}
-        onClick={request === null ? undefined : () => void simulate(request)}
+        onClick={request === null ? undefined : () => simulate(request)}
       >
         {run.kind === 'running' ? 'Simulating...' : 'Simulate'}
       </button>
@@ -100,12 +62,55 @@ export function StrategyBench({ client, model, compounds, drivers }: Readonly<Pr
           {MAX_TYRE_AGE_LAPS}.
         </p>
       ) : null}
-      {run.kind === 'failed' ? (
+      <RunOutcome run={run} outdated={outdated} />
+    </section>
+  )
+}
+
+interface DriverSelectProps {
+  drivers: Driver[]
+  value: string
+  onChange(value: string): void
+}
+
+function DriverSelect({ drivers, value, onChange }: Readonly<DriverSelectProps>) {
+  return (
+    <label className="field">
+      <span className="label">Driver</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value={AVERAGE_CAR}>The average car of the race</option>
+        {drivers.map(({ driverNumber, name }) => (
+          <option key={driverNumber} value={driverNumber}>
+            {driverNumber} {name}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function RunOutcome({ run, outdated }: Readonly<{ run: Run; outdated: boolean }>) {
+  switch (run.kind) {
+    case 'idle':
+    case 'running':
+      return null
+    case 'failed':
+      return (
         <p className="notice" role="alert">
           The simulation failed: {run.message}
         </p>
-      ) : null}
-      {run.kind === 'done' ? <StrategyResults simulation={run.simulation} /> : null}
-    </section>
-  )
+      )
+    case 'done':
+      return (
+        <>
+          {outdated ? (
+            <p className="notice" role="status">
+              The strategies or the driver changed since these results. Simulate again to update
+              them.
+            </p>
+          ) : null}
+          <StrategyResults simulation={run.simulation} outdated={outdated} />
+        </>
+      )
+  }
 }

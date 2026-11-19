@@ -416,4 +416,53 @@ describe('SimulatorScreen', () => {
     expect(left?.signal.aborted).toBe(true)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('marks the results as outdated once the strategies change, until they are simulated again', async () => {
+    renderScreen()
+    const first = await strategy(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
+    await screen.findByRole('region', { name: 'Results' })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    fireEvent.change(stint(first, 1).getByLabelText('Tyre age at start'), {
+      target: { value: '3' },
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('Simulate again to update them')
+    expect(screen.getByRole('region', { name: 'Results' })).toHaveClass('results--outdated')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
+
+    expect(await screen.findByRole('region', { name: 'Results' })).not.toHaveClass(
+      'results--outdated',
+    )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('marks the results as outdated once the driver changes', async () => {
+    renderScreen()
+    await strategy(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
+    await screen.findByRole('region', { name: 'Results' })
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Driver' }), { target: { value: '16' } })
+
+    expect(screen.getByRole('status')).toHaveTextContent('The strategies or the driver changed')
+  })
+
+  it('marks an answer as outdated when the strategies changed while it was on its way', async () => {
+    const answers: ((response: Response) => void)[] = []
+    renderScreen({
+      ...API,
+      'POST /api/simulations': () => new Promise<Response>((resolve) => answers.push(resolve)),
+    })
+    const first = await strategy(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
+
+    fireEvent.change(stint(first, 1).getByLabelText('Laps'), { target: { value: '50' } })
+    answers[0]?.(json(SIMULATION))
+
+    expect(await screen.findByRole('region', { name: 'Results' })).toHaveClass('results--outdated')
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
 })

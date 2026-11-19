@@ -135,6 +135,12 @@ export function simulationRequest(
   }
 }
 
+/** Whether two requests ask for the same simulation: `simulationRequest` builds both, so their
+ * keys come in one order. */
+export function sameRequest(a: SimulationRequest, b: SimulationRequest | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 function stint(id: number, compound: Compound, laps: string): StintDraft {
   return { id, compound, laps, tyreAge: '0' }
 }

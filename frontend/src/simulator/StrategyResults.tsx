@@ -9,15 +9,17 @@ type Rejected = Schemas['RejectedResponse']
 
 interface Props {
   simulation: Schemas['SimulationResponse']
+  /** The form no longer asks for what these results answer. */
+  outdated: boolean
 }
 
 /** Each strategy as the API answered it, in the order it was sent. */
-export function StrategyResults({ simulation }: Readonly<Props>) {
+export function StrategyResults({ simulation, outdated }: Readonly<Props>) {
   const series: Series[] = simulation.results.flatMap((result, index) =>
     result.outcome === 'simulated' ? [{ number: index + 1, result }] : [],
   )
   return (
-    <section className="results" aria-label="Results">
+    <section className={outdated ? 'results results--outdated' : 'results'} aria-label="Results">
       {series.length === 0 ? null : <LapChart series={series} />}
       <div className="result-cards">
         {simulation.results.map((result, index) =>
