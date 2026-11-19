@@ -31,11 +31,36 @@ describe('LapChart', () => {
       />,
     )
 
-    expect(screen.getByRole('img')).toHaveAccessibleName('The lap times of 2 simulated strategies')
+    expect(screen.getByRole('img')).toHaveAccessibleName(
+      'Lap times of strategy 1 and strategy 2, laps 1 to 4, from 1:37.800 to 1:38.700. ' +
+        'Strategy 1 stops on lap 2; strategy 2 stops on laps 1 and 2.',
+    )
     expect(seriesOf(container, 1).querySelectorAll('line.trace')).toHaveLength(3)
     expect(seriesOf(container, 1).querySelectorAll('circle.stop')).toHaveLength(1)
     expect(seriesOf(container, 2).querySelectorAll('circle.stop')).toHaveLength(2)
     expect(seriesOf(container, 2)).toHaveClass('series--2')
+  })
+
+  it('names each strategy in a legend in its colour, and says a strategy that never stops', () => {
+    render(
+      <LapChart
+        series={[
+          { number: 2, result: ONE_STOP },
+          { number: 4, result: { ...TWO_STOPS, stops: [] } },
+        ]}
+      />,
+    )
+
+    const legend = screen.getAllByRole('listitem')
+    expect(legend.map((item) => item.textContent)).toEqual([
+      'Strategy 2',
+      'Strategy 4',
+      'A tyre older or newer than any calibrated',
+    ])
+    expect(legend[0]).toHaveClass('series--2')
+    expect(screen.getByRole('img')).toHaveAccessibleName(
+      expect.stringContaining('Strategy 2 stops on lap 2; strategy 4 does not stop.'),
+    )
   })
 
   it('dashes the segments that reach a lap outside the calibrated tyre ages', () => {

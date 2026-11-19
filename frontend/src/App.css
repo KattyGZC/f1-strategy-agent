@@ -960,11 +960,40 @@ main {
   padding: 1rem;
 }
 
-.lap-chart svg {
+.lap-chart-plot {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  padding-right: 0.75rem;
+}
+
+.lap-chart-plot svg {
   width: 100%;
-  height: auto;
-  /* Wider screens add room around the chart, not size to its text. */
-  max-height: 22rem;
+  overflow: visible;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.swatch {
+  width: 1.25rem;
+  border-top: 2px solid var(--series, var(--muted));
+}
+
+.swatch--dashed {
+  border-top-style: dashed;
 }
 
 .lap-chart .grid {
@@ -1000,15 +1029,5 @@ main {
 
   .race-model {
     position: static;
-  }
-
-  /* Scaled down to a phone, the axis labels would shrink to half their size; the chart scrolls
-     within its panel instead. */
-  .lap-chart {
-    overflow-x: auto;
-  }
-
-  .lap-chart svg {
-    min-width: 52rem;
   }
 }
