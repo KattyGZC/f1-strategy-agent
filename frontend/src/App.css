@@ -904,15 +904,14 @@ main {
 
 .results {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem);
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
   align-items: start;
 }
 
+/* The cards and what the simulation leaves out share one grid, side by side in reading order. */
 .result-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 0.75rem;
+  display: contents;
 }
 
 .result {
@@ -958,6 +957,8 @@ main {
 .lap-chart svg {
   width: 100%;
   height: auto;
+  /* Wider screens add room around the chart, not size to its text. */
+  max-height: 22rem;
 }
 
 .lap-chart .grid {
@@ -987,8 +988,7 @@ main {
 }
 
 @media (max-width: 48rem) {
-  .race-setup,
-  .results {
+  .race-setup {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1003,6 +1003,6 @@ main {
   }
 
   .lap-chart svg {
-    min-width: 40rem;
+    min-width: 52rem;
   }
 }

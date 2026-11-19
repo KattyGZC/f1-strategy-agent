@@ -11,7 +11,7 @@ export interface Series {
   readonly result: Simulated
 }
 
-const WIDTH = 720
+const WIDTH = 960
 const HEIGHT = 320
 const LEFT = 64
 const RIGHT = WIDTH - 16
