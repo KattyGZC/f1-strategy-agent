@@ -60,6 +60,8 @@ fieldset {
   min-width: 0;
 }
 
+/* On a block or an inline box only: a table's height is a minimum (CSS 2.1, 17.5.3) and its
+   overflow is not clipped, so a hidden table goes inside a hidden div. */
 .visually-hidden {
   position: absolute;
   width: 1px;

@@ -127,29 +127,31 @@ function LapTable({ laps }: Readonly<TableProps>) {
     (a, b) => a - b,
   )
   return (
-    <table className="visually-hidden">
-      <caption>Lap times of the simulated strategies</caption>
-      <thead>
-        <tr>
-          <th scope="col">Lap</th>
-          {laps.map((line) => (
-            <th key={line.number} scope="col">
-              Strategy {line.number}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {lapNumbers.map((lapNumber) => (
-          <tr key={lapNumber}>
-            <th scope="row">{lapNumber}</th>
+    <div className="visually-hidden">
+      <table>
+        <caption>Lap times of the simulated strategies</caption>
+        <thead>
+          <tr>
+            <th scope="col">Lap</th>
             {laps.map((line) => (
-              <td key={line.number}>{formatLapTime(line.times.get(lapNumber) ?? null)}</td>
+              <th key={line.number} scope="col">
+                Strategy {line.number}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {lapNumbers.map((lapNumber) => (
+            <tr key={lapNumber}>
+              <th scope="row">{lapNumber}</th>
+              {laps.map((line) => (
+                <td key={line.number}>{formatLapTime(line.times.get(lapNumber) ?? null)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
