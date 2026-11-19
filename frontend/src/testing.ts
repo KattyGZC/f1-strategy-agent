@@ -14,6 +14,12 @@ export function json(body: unknown, status = 200): Response {
 
 export type Route = (request: Request) => Response | Promise<Response>
 
+/** A route that answers only by rejecting, as fetch does, once its request is aborted. */
+export const abortable: Route = (request) =>
+  new Promise((_, reject) =>
+    request.signal.addEventListener('abort', () => reject(new DOMException('', 'AbortError'))),
+  )
+
 export function fakeApi(routes: Readonly<Record<string, Route>>) {
   const requests: Request[] = []
   const fetchImpl: typeof fetch = (input) => {
@@ -259,16 +265,18 @@ export const RACE_MODEL: Schemas['RaceModelResponse'] = {
   ],
 }
 
+/** Age 0 is never calibrated (ADR 0017), so each stint's first lap is extrapolated. */
 function simulatedLap(lapNumber: number, tyreAge: number, lapTimeS: number) {
   return {
     lap_number: lapNumber,
     tyre_age_laps: tyreAge,
     lap_time_s: lapTimeS,
-    extrapolated: false,
+    extrapolated: tyreAge === 0,
   }
 }
 
-/** A one-stop strategy and a two-stop one, as the API answered them for Bahrain 2024. */
+/** A one-stop and a two-stop strategy on four laps that stand in for a race: synthetic laps, with
+ * the totals and gaps the API answered for Bahrain 2024. */
 export const ONE_STOP: Schemas['SimulatedResponse'] = {
   outcome: 'simulated',
   stints: [
@@ -294,7 +302,7 @@ export const TWO_STOPS: Schemas['SimulatedResponse'] = {
   ],
   total_s: 5571.562,
   gap_to_fastest_s: 0,
-  caveats: ['pit_loss_not_reliable', 'one_dry_compound'],
+  caveats: ['extrapolated_tyre_age'],
 }
 
 export const REJECTED: Schemas['RejectedResponse'] = {

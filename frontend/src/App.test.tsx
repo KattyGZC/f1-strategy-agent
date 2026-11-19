@@ -81,7 +81,7 @@ describe('App', () => {
     expect(replay).toHaveAttribute('tabindex', '0')
     expect(simulator).toHaveAttribute('tabindex', '-1')
 
-    fireEvent.keyDown(replay, { key: 'ArrowRight' })
+    expect(fireEvent.keyDown(replay, { key: 'ArrowRight' })).toBe(false)
     expect(await screen.findByRole('tab', { name: 'Simulator', selected: true })).toHaveFocus()
 
     fireEvent.keyDown(simulator, { key: 'Home' })
@@ -93,7 +93,8 @@ describe('App', () => {
     fireEvent.keyDown(simulator, { key: 'ArrowLeft' })
     expect(await screen.findByRole('tab', { name: 'Replay', selected: true })).toHaveFocus()
 
-    fireEvent.keyDown(replay, { key: 'Enter' })
-    expect(screen.getByRole('tab', { name: 'Replay' })).toHaveAttribute('aria-selected', 'true')
+    expect(fireEvent.keyDown(replay, { key: 'a' })).toBe(true)
+    expect(replay).toHaveAttribute('aria-selected', 'true')
+    expect(window.location.hash).toBe('#/replay')
   })
 })

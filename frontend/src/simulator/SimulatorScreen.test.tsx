@@ -11,6 +11,7 @@ import {
   RACE_MODEL,
   SIMULATION,
   TWO_STOPS,
+  abortable,
   type Route,
 } from '../testing.ts'
 import { SimulatorScreen } from './SimulatorScreen.tsx'
@@ -42,12 +43,6 @@ const API: Record<string, Route> = {
   'GET /api/sessions/9480': () => json({ ...ENTRY, session_key: 9480 }),
   'POST /api/simulations': () => json(SIMULATION),
 }
-
-/** Rejects as fetch does when its request is aborted. */
-const abortable: Route = (request) =>
-  new Promise((_, reject) =>
-    request.signal.addEventListener('abort', () => reject(new DOMException('', 'AbortError'))),
-  )
 
 function renderScreen(routes: Record<string, Route> = API) {
   const api = fakeApi(routes)
@@ -199,13 +194,8 @@ describe('SimulatorScreen', () => {
     expect(twoStops).toHaveAttribute('aria-current', 'true')
     expect(within(twoStops).getByText('Fastest')).toBeInTheDocument()
     expect(
-      within(twoStops)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual([
-      'Its pit loss was measured on fewer than 5 stops',
-      'Every stint runs the same dry compound',
-    ])
+      within(twoStops).getByText('Stop on lap 1, 24.343 s; Stop on lap 2, 24.343 s'),
+    ).toBeInTheDocument()
     expect(
       within(results.getByRole('article', { name: 'Strategy 3' })).getByText(
         'The race did not calibrate this compound (stint 1).',
@@ -220,6 +210,32 @@ describe('SimulatorScreen', () => {
     expect(left.getAllByRole('listitem')[0]).toHaveTextContent(
       'The standing start: lap 1 is predicted as a racing lap',
     )
+  })
+
+  it('names every caveat the API gives a strategy', async () => {
+    renderScreen({
+      ...API,
+      'POST /api/simulations': () =>
+        json({
+          ...SIMULATION,
+          results: [
+            {
+              ...TWO_STOPS,
+              caveats: ['pit_loss_not_reliable', 'extrapolated_tyre_age', 'one_dry_compound'],
+            },
+          ],
+        }),
+    })
+    await strategy(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
+
+    const result = within(await screen.findByRole('article', { name: 'Strategy 1' }))
+    expect(result.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Its pit loss was measured on fewer than 5 stops',
+      'Some laps run a tyre older or newer than any the race calibrated',
+      'Every stint runs the same dry compound',
+    ])
   })
 
   it('says a strategy that stops nowhere has no stop', async () => {
@@ -366,7 +382,7 @@ describe('SimulatorScreen', () => {
     ).toBeInTheDocument()
   })
 
-  it('stops reading the races and the race when the screen goes away', async () => {
+  it('stops reading the races when the screen goes away', async () => {
     const { requests, unmount } = renderScreen({ ...API, 'GET /api/races': abortable })
 
     unmount()
@@ -375,7 +391,7 @@ describe('SimulatorScreen', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('says nothing when the race it leaves is still loading', async () => {
+  it('stops reading a race still loading when the screen goes away', async () => {
     const { requests, unmount } = renderScreen({ ...API, 'GET /api/races/9472': abortable })
     await vi.waitFor(() => expect(paths(requests)).toContain('GET /api/races/9472'))
 
@@ -383,6 +399,21 @@ describe('SimulatorScreen', () => {
 
     const model = requests.find(({ url }) => new URL(url).pathname === '/api/races/9472')
     await vi.waitFor(() => expect(model?.signal.aborted).toBe(true))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('stops reading the race it leaves when another is chosen', async () => {
+    const { requests } = renderScreen({ ...API, 'GET /api/races/9472': abortable })
+    await vi.waitFor(() => expect(paths(requests)).toContain('GET /api/races/9472'))
+
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Race' }), {
+      target: { value: '9480' },
+    })
+
+    const model = within(await screen.findByRole('complementary', { name: "The race's model" }))
+    expect(model.getByRole('heading')).toHaveTextContent('Saudi Arabian Grand Prix')
+    const left = requests.find(({ url }) => new URL(url).pathname === '/api/races/9472')
+    expect(left?.signal.aborted).toBe(true)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
