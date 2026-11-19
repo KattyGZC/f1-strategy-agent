@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
-# Checks the edge of a running stack against ADR 0016 and ADR 0017: request ids, error shape,
-# limits and security headers, through nginx. The bursts run last, since each leaves the address
-# throttled for a moment; the simulator's runs first, too small to reach the API's zone.
+# Checks the edge of a running stack against ADR 0016, ADR 0017 and ADR 0019: request ids, error
+# shape, limits, security headers and caching, through nginx. The bursts run last, since each
+# leaves the address throttled for a moment; the simulator's runs first, too small to reach the
+# API's zone.
 set -eu
 
 base="$1"
@@ -58,6 +59,7 @@ status="$(fetch --header "X-Request-ID: $client_id" "$base/api/health")"
 expect_status "$status" 200 "health"
 expect_request_id "health"
 expect_security_headers "health"
+[ -z "$(header cache-control)" ] || fail "health: the edge set Cache-Control $(header cache-control)"
 health_id="$(header x-request-id)"
 sleep 1
 eval "$logs" | grep -q "\"request_id\": *\"$health_id\"" \
@@ -68,6 +70,18 @@ status="$(fetch "$base/")"
 expect_status "$status" 200 "screen"
 expect_request_id "screen"
 expect_security_headers "screen"
+[ "$(header cache-control)" = "no-cache" ] || fail "screen: Cache-Control is $(header cache-control)"
+asset="$(grep -o '/assets/[^"]*\.js' "$work/body" | head -n 1)"
+
+status="$(fetch "$base$asset")"
+expect_status "$status" 200 "asset $asset"
+expect_security_headers "asset"
+[ "$(header cache-control)" = "public, max-age=31536000, immutable" ] \
+  || fail "asset: Cache-Control is $(header cache-control)"
+
+status="$(fetch "$base/assets/no-such-build.js")"
+expect_status "$status" 404 "missing asset"
+[ -z "$(header cache-control)" ] || fail "missing asset: Cache-Control is $(header cache-control)"
 
 status="$(fetch "$base/api/no-such-route")"
 expect_status "$status" 404 "unknown route"
