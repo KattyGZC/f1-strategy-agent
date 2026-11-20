@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react()],
+  // Every asset is a file of its own: the content security policy allows no data: URI (ADR 0020).
+  build: { assetsInlineLimit: 0 },
   server: {
     proxy: { '/api': 'http://localhost:8000' },
   },
