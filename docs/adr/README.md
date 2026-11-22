@@ -23,6 +23,7 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0017](0017-strategy-simulation-in-the-race-it-was-calibrated-on.md) | A strategy is simulated in the race it was calibrated on, from the model alone | Accepted |
 | [0018](0018-screens-state-and-charts-in-the-frontend.md) | Screens are tabs in the URL, state stays in React, charts are drawn in SVG | Accepted |
 | [0019](0019-the-edge-says-how-long-a-browser-keeps-each-file.md) | The edge says how long a browser keeps each file | Accepted |
+| [0020](0020-the-fonts-are-served-by-the-edge.md) | The fonts are served by the edge | Accepted |
 
 ## Template
 

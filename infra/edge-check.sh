@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# Checks the edge of a running stack against ADR 0016, ADR 0017 and ADR 0019: request ids, error
-# shape, limits, security headers and caching, through nginx. The bursts run last, since each
-# leaves the address throttled for a moment; the simulator's runs first, too small to reach the
-# API's zone.
+# Checks the edge of a running stack against ADR 0016, ADR 0017, ADR 0019 and ADR 0020: request
+# ids, error shape, limits, security headers, caching and fonts, through nginx. The bursts run
+# last, since each leaves the address throttled for a moment; the simulator's runs first, too
+# small to reach the API's zone.
 set -eu
 
 base="$1"
@@ -71,13 +71,34 @@ expect_status "$status" 200 "screen"
 expect_request_id "screen"
 expect_security_headers "screen"
 [ "$(header cache-control)" = "no-cache" ] || fail "screen: Cache-Control is $(header cache-control)"
+grep -q 'https\?://' "$work/body" && fail "screen: index.html loads from another origin"
 asset="$(grep -o '/assets/[^"]*\.js' "$work/body" | head -n 1)"
+styles="$(grep -o '/assets/[^"]*\.css' "$work/body" | head -n 1)"
+[ -n "$styles" ] || fail "screen: index.html links no stylesheet"
 
 status="$(fetch "$base$asset")"
 expect_status "$status" 200 "asset $asset"
 expect_security_headers "asset"
 [ "$(header cache-control)" = "public, max-age=31536000, immutable" ] \
   || fail "asset: Cache-Control is $(header cache-control)"
+
+# The fonts come from the build, under the policy's 'self' (ADR 0020).
+status="$(fetch "$base$styles")"
+expect_status "$status" 200 "styles $styles"
+grep -q 'url(data:' "$work/body" && fail "styles: an asset is inlined as a data: URI"
+grep -qE 'url\(.?(https?:)?//|@import' "$work/body" && fail "styles: they load from another origin"
+font="$(grep -o '/assets/[^)]*\.woff2' "$work/body" | head -n 1)"
+
+if [ -z "$font" ]; then
+  fail "styles: no font from the build"
+else
+  status="$(fetch "$base$font")"
+  expect_status "$status" 200 "font $font"
+  expect_security_headers "font"
+  [ "$(header content-type)" = "font/woff2" ] || fail "font: Content-Type is $(header content-type)"
+  [ "$(header cache-control)" = "public, max-age=31536000, immutable" ] \
+    || fail "font: Cache-Control is $(header cache-control)"
+fi
 
 status="$(fetch "$base/assets/no-such-build.js")"
 expect_status "$status" 404 "missing asset"
