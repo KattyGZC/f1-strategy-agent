@@ -26,7 +26,7 @@ Done:
 
 5. **Simulator.** Each race's pit loss is measured on its own stops (ADR 0015). `POST /api/simulations` simulates 1 to 4 strategies of stints on a race's stored calibration, for a driver or the average car, in the pure domain: each lap is the model's prediction, each stop adds the pit loss, a strategy the race cannot run is rejected with its reason, and each result names its caveats and what the model leaves out (ADR 0017). `GET /api/races` and `GET /api/races/{session_key}` give the form its options. Every request is traceable by one id, and nginx bounds bodies and rates, tighter for simulations (ADR 0016). The Simulator tab builds the strategies and shows the results and a lap-time chart; the screens are tabs in the URL (ADR 0018).
 
-Next, in order. Each phase is planned in the session that starts it and recorded in the devlog.
+Next, in order. Each phase is planned in the session that starts it and recorded in the devlog. A phase that spans more than a few sessions keeps its plan in `docs/specs/phase-N-plan.md`, and each pull request ticks its task there.
 
 6. **Assistant.** Retrieval over facts and rules, tools (stats query, semantic search, simulation), streaming answers with citations.
 7. **Production.** Deploy on merge, observability, a public demo.
@@ -44,7 +44,7 @@ Update this section in the change that closes a phase.
 | `.claude/settings.json`, `.claude/hooks/` | Hooks that run `make fast-check` before the agent commits or stops, and the commands the agent may not run (ADR 0010) |
 | `docs/adr/` | Architecture decisions, numbered, one per file. `README.md` holds the index and the template |
 | `docs/devlog/` | One entry per working session with the agent, in order. `README.md` holds the format and the index |
-| `docs/specs/` | One spec per phase or large change: intent, objective, success criteria, what is out of scope. The decisions it leads to are ADRs |
+| `docs/specs/` | One spec per phase or large change: intent, objective, success criteria, what is out of scope. The decisions it leads to are ADRs. A long phase adds its plan, one task per pull request |
 | `README.md`, `README.es.md` | What exists today, in English and Spanish |
 | `Makefile` | The one entry point: `install`, `check`, `fast-check`, `mutation`, `edge-check`, `format`, `openapi`, `up`, `down`, `logs`, `migrate`, `ingest`, `ingest-telemetry`, `transform`, `calibrate` |
 | `backend/` | Python 3.12 with uv. `src/f1_strategy/{domain,application,adapters}`, `tests/`, `Dockerfile`. Tooling config in `pyproject.toml`. The ingestion CLI is `adapters/cli.py`; settings are read once in `adapters/settings.py` |
