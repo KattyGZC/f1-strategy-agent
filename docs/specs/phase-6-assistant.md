@@ -2,7 +2,7 @@
 
 - Status: approved by the author on 2026-11-22; design settled on 2026-11-23 in ADR 0021 to ADR 0024, which bind where this spec differs
 - Date: 2026-11-22
-- Decisions it leads to are recorded as ADRs; this spec does not replace them.
+- Decisions it leads to are recorded as ADRs; this spec does not replace them. The tasks are in [the phase 6 plan](phase-6-plan.md).
 
 ## Intent
 
