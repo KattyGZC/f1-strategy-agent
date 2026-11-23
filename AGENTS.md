@@ -44,6 +44,7 @@ Update this section in the change that closes a phase.
 | `.claude/settings.json`, `.claude/hooks/` | Hooks that run `make fast-check` before the agent commits or stops, and the commands the agent may not run (ADR 0010) |
 | `docs/adr/` | Architecture decisions, numbered, one per file. `README.md` holds the index and the template |
 | `docs/devlog/` | One entry per working session with the agent, in order. `README.md` holds the format and the index |
+| `docs/specs/` | One spec per phase or large change: intent, objective, success criteria, what is out of scope. The decisions it leads to are ADRs |
 | `README.md`, `README.es.md` | What exists today, in English and Spanish |
 | `Makefile` | The one entry point: `install`, `check`, `fast-check`, `mutation`, `edge-check`, `format`, `openapi`, `up`, `down`, `logs`, `migrate`, `ingest`, `ingest-telemetry`, `transform`, `calibrate` |
 | `backend/` | Python 3.12 with uv. `src/f1_strategy/{domain,application,adapters}`, `tests/`, `Dockerfile`. Tooling config in `pyproject.toml`. The ingestion CLI is `adapters/cli.py`; settings are read once in `adapters/settings.py` |
