@@ -1,6 +1,6 @@
 # Spec: Phase 6, the assistant (V1)
 
-- Status: approved by the author on 2026-11-22
+- Status: approved by the author on 2026-11-22; design settled on 2026-11-23 in ADR 0021 to ADR 0024, which bind where this spec differs
 - Date: 2026-11-22
 - Decisions it leads to are recorded as ADRs; this spec does not replace them.
 
@@ -40,7 +40,7 @@ The model chooses tools and writes prose. Every number, position, gap, compound 
 Additions to what phases 0 to 5 use (Python 3.12 with uv, FastAPI, PostgreSQL 17 with pgvector, MongoDB, Redis, React with Vite and TypeScript, nginx):
 
 - **Language model:** Claude Opus 5.5 (`claude-opus-5-5`) through the official `anthropic` Python SDK, async client, streaming. The model name is a setting.
-- **Embeddings:** Voyage AI through its official Python SDK. The model and its dimension are settings, fixed by the migration that declares the vector column.
+- **Embeddings:** Voyage AI (`voyage-4`, 1024 dimensions), called over HTTP with the existing `httpx2` client rather than its SDK (ADR 0024). The model and its dimension are settings, fixed by the migration that declares the vector column.
 - **Vector store:** pgvector in the existing PostgreSQL (ADR 0002), HNSW index declared in a migration.
 - **Rules source:** the FIA Formula 1 Sporting Regulations of each season in the clean model, stored as received in the document store before they are split and embedded.
 
@@ -70,9 +70,9 @@ backend/src/f1_strategy/domain/rules.py             → regulation articles and 
 backend/src/f1_strategy/application/assistant.py    → the answer use case: the tool loop and its limits, behind ports
 backend/src/f1_strategy/application/embedding.py    → the reconciling embed sweep
 backend/src/f1_strategy/adapters/language_model.py  → the only importer of anthropic; prompts and model name live here
-backend/src/f1_strategy/adapters/embeddings.py      → the only importer of the Voyage SDK
+backend/src/f1_strategy/adapters/embeddings.py      → the only caller of Voyage's API
 backend/src/f1_strategy/adapters/rule_store.py      → chunks and vectors in PostgreSQL
-backend/src/f1_strategy/adapters/http/assistant.py  → POST /api/assistant, answered as SSE
+backend/src/f1_strategy/adapters/http/assistant.py  → GET /api/assistant, and POST /api/answers answered as SSE (ADR 0023)
 backend/src/f1_strategy/adapters/migrations/        → the chunk table, its vector column and HNSW index
 frontend/src/assistant/                             → the Assistant tab
 docs/specs/                                         → this spec
@@ -126,7 +126,7 @@ Each one is checked by a test, a command or the golden questions:
 6. A question with no relevant retrieval says so, instead of answering from the model's memory.
 7. The answer is in the language of the question, English or Spanish.
 8. Each limit, once reached, ends the answer with its own error `code` and leaves the stream well formed. The limits are question length, tool rounds, answer tokens, time per question, concurrent answers and requests per address at the edge.
-9. When the provider reports the spend limit is reached, `/api/assistant` answers with a dedicated `code`. The tab shows the paused notice and a recorded example answer, and the replay and simulator tabs keep working.
+9. When the provider reports the spend limit is reached, `/api/answers` answers with a dedicated `code`. The tab shows the paused notice and a recorded example answer, and the replay and simulator tabs keep working.
 10. The logs hold one line per answer with the request id, tools used, input, output and cached tokens, cost and duration, and never the API keys.
 11. `make check` passes with no credentials set.
 
@@ -142,7 +142,7 @@ Each one is checked by a test, a command or the golden questions:
 
 ## Open questions
 
-The author agreed to each proposal below on 2026-11-22. Session 2 (design) records them in ADRs, and settles question 5, which needs the provider's documentation:
+The author agreed to each proposal below on 2026-11-22. All seven were settled on 2026-11-23: 1 and 3 in ADR 0024 (editions in force at the race's date, downloaded from a manifest with hashes), 2 in ADR 0024 (race control through a tool, not embedded), 4 to 6 in ADR 0022 (`ASSISTANT_ENABLED`, a budget of our own of 2 USD a day within 25 a month, the limit values), 7 in ADR 0023. As first written:
 
 1. **Which seasons' regulations.** The clean model holds more than one season, and 2026 runs under new regulations. Is each season's Sporting Regulations indexed and searched by the season of the race asked about? Proposed: yes.
 2. **Race control: query or search.** Proposed: race control messages are reached through `query_stats` (filtered by session and lap), not embedded, because they are rows with ids. Only the regulations are embedded.
