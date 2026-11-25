@@ -14,6 +14,7 @@ from f1_strategy.adapters.http.responses import (
     InvalidField,
     InvalidRequestResponse,
 )
+from f1_strategy.adapters.http.services import AssistantDisabledError
 from f1_strategy.adapters.observability import current_request_id
 from f1_strategy.application.replay import (
     LapNotFoundError,
@@ -31,6 +32,7 @@ type Handler = Callable[[Request, Exception], JSONResponse]
 ERROR_CODE_STATE = "error_code"
 
 USE_CASE_ERRORS: dict[type[Exception], tuple[int, ErrorCode]] = {
+    AssistantDisabledError: (status.HTTP_503_SERVICE_UNAVAILABLE, ErrorCode.ASSISTANT_DISABLED),
     DriverNotCalibratedError: (status.HTTP_404_NOT_FOUND, ErrorCode.DRIVER_NOT_CALIBRATED),
     LapNotFoundError: (status.HTTP_404_NOT_FOUND, ErrorCode.LAP_NOT_FOUND),
     RaceNotCalibratedError: (status.HTTP_404_NOT_FOUND, ErrorCode.RACE_NOT_CALIBRATED),

@@ -21,6 +21,7 @@ from f1_strategy.adapters.clean_store import (
 )
 from f1_strategy.adapters.replay_store import RedisPing, RedisReplayStore, redis_client
 from f1_strategy.adapters.settings import ApiSettings
+from f1_strategy.application.assistant import AnswerQuestion
 from f1_strategy.application.readiness import CheckReadiness, Dependency
 from f1_strategy.application.replay import (
     ControlReplay,
@@ -37,6 +38,25 @@ from f1_strategy.application.simulation import ListRaces, ReadRace, SimulateStra
 REPLAY_ID_BYTES = 16
 
 
+class AssistantDisabledError(Exception):
+    def __init__(self) -> None:
+        super().__init__("the assistant is turned off on this server")
+
+
+@dataclass(frozen=True)
+class AssistantAvailable:
+    answer: AnswerQuestion
+    question_max_chars: int
+
+
+@dataclass(frozen=True)
+class AssistantDisabled:
+    pass
+
+
+type Assistant = AssistantAvailable | AssistantDisabled
+
+
 @dataclass(frozen=True)
 class ApiServices:
     start: StartReplay
@@ -48,6 +68,7 @@ class ApiServices:
     list_races: ListRaces
     read_race: ReadRace
     simulate: SimulateStrategies
+    assistant: Assistant
     readiness: CheckReadiness
 
 
@@ -82,6 +103,11 @@ def process_owner() -> str:
 @asynccontextmanager
 async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
     """The services, open for the block; leaving it stops this process's producers first."""
+    if settings.assistant_enabled:
+        raise RuntimeError(
+            "ASSISTANT_ENABLED is true, but the language model adapter it needs is not built"
+            " yet (phase 6 plan, T4); set it to false"
+        )
     pool = connection_pool(
         settings.postgres_uri.get_secret_value(),
         max_size=settings.postgres_pool_size,
@@ -118,6 +144,7 @@ async def api_services(settings: ApiSettings) -> AsyncIterator[ApiServices]:
                     list_races=ListRaces(races),
                     read_race=ReadRace(races),
                     simulate=SimulateStrategies(races),
+                    assistant=AssistantDisabled(),
                     readiness=CheckReadiness(
                         {
                             Dependency.POSTGRES: PostgresPing(pool),

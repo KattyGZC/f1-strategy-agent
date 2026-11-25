@@ -38,3 +38,5 @@ class ApiSettings(PostgresSettings):
     replay_tick_s: float = Field(gt=0)
     replay_lease_s: float = Field(gt=0)
     replay_append_batch: int = Field(gt=0)
+    assistant_enabled: bool
+    assistant_question_max_chars: int = Field(gt=0)

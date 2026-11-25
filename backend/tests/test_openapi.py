@@ -1,6 +1,7 @@
 import json
 
 from f1_strategy.adapters.http.openapi import render_openapi
+from f1_strategy.domain.assistant import AnswerEventKind
 from f1_strategy.domain.replay import EventKind
 
 
@@ -28,6 +29,8 @@ def test_openapi_documents_the_health_response() -> None:
         "/api/races",
         "/api/races/{session_key}",
         "/api/simulations",
+        "/api/assistant",
+        "/api/answers",
     }
 
 
@@ -45,6 +48,27 @@ def test_openapi_documents_every_replayed_event_the_failure_and_the_reset() -> N
     assert {"ReplayEvent", "ReplayFailedEvent", "ReplayResetEvent"} <= refs
     assert kinds == {kind.value for kind in EventKind}
     assert stream["404"]["content"] == {
+        "application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}
+    }
+
+
+def test_openapi_documents_every_answer_event_and_the_errors_before_the_stream() -> None:
+    document = json.loads(render_openapi())
+
+    answers = document["paths"]["/api/answers"]["post"]["responses"]
+    data = answers["200"]["content"]["text/event-stream"]["itemSchema"]["properties"]["data"]
+    refs = {ref["$ref"].rsplit("/", 1)[1] for ref in data["contentSchema"]["anyOf"]}
+    union = document["components"]["schemas"]["AnswerEventBody"]
+    kinds = {
+        document["components"]["schemas"][ref.rsplit("/", 1)[1]]["properties"]["kind"]["const"]
+        for ref in union["discriminator"]["mapping"].values()
+    }
+    assert "AnswerEventBody" in refs
+    assert kinds == {kind.value for kind in AnswerEventKind}
+    assert answers["422"]["content"] == {
+        "application/json": {"schema": {"$ref": "#/components/schemas/InvalidRequestResponse"}}
+    }
+    assert answers["503"]["content"] == {
         "application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}
     }
 

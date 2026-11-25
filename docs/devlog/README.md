@@ -29,6 +29,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-11-23 | [02. Phase 6: the plan](2026-11-23-02-phase-6-plan.md) |
 | 2026-11-25 | [01. Phase 6: the answer's contract and the tool loop](2026-11-25-01-phase-6-answer-loop.md) |
 | 2026-11-25 | [02. Phase 6: the first data tools](2026-11-25-02-phase-6-first-data-tools.md) |
+| 2026-11-25 | [03. Phase 6: the assistant's HTTP contract](2026-11-25-03-phase-6-assistant-http.md) |
 
 ## Template
 
