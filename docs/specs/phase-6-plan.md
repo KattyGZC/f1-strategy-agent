@@ -51,12 +51,12 @@ Verification: `make check`. Files: `adapters/assistant_tools.py`, the reads in `
 
 #### T3. Settings and the HTTP contract
 
-- [ ] Settings: `ASSISTANT_ENABLED` (required), the limits and prices of ADR 0022, the keys as `SecretStr` required only when enabled; `.env.example` lists them. The settings refuse an SDK timeout that is not below the answer's (ADR 0021).
-- [ ] `ErrorCode` gains the assistant's codes (ADR 0023).
-- [ ] `GET /api/assistant` (`available` or `disabled`, the 4 to 6 suggestions defined in the backend) and `POST /api/answers` as SSE of typed events, the task cancelled when the browser disconnects.
-- [ ] Route tests with the fake model: event order, the errors before the stream, 503 `assistant_disabled`, the request id; `make openapi` regenerates the client.
+- [x] Settings: `ASSISTANT_ENABLED` (required) and `ASSISTANT_QUESTION_MAX_CHARS`, the two T3 reads; `.env.example` lists them. The keys, the model's settings, the answer's limits and the check on the SDK timeout move to T4, which builds the answer they configure; the budget's to T12. Until T4, an enabled assistant refuses to start, naming the missing adapter.
+- [x] `ErrorCode` gains the assistant's codes (ADR 0023).
+- [x] `GET /api/assistant` (`available` or `disabled`, the 4 suggestions defined in `adapters/assistant_suggestions.py`) and `POST /api/answers` as SSE of typed events, the task cancelled when the browser disconnects. The `decline_question` tool, which offers a suggestion by id.
+- [x] Route tests with the fake model: event order, the errors before the stream, 503 `assistant_disabled`, the request id; `make openapi` regenerates the client.
 
-Verification: `make check` with no credentials. Files: `adapters/settings.py`, `adapters/http/errors.py`, `adapters/http/assistant.py`, `adapters/http/services.py`, tests. Size M. Depends on T1.
+Verification: `make check` with no credentials. Files: `adapters/settings.py`, `adapters/http/errors.py`, `adapters/http/assistant.py`, `adapters/http/services.py`, `adapters/assistant_suggestions.py`, the decline in `adapters/assistant_tools.py`, tests. Size M. Depends on T1.
 
 #### T4. The Anthropic adapter
 
@@ -65,8 +65,9 @@ Verification: `make check` with no credentials. Files: `adapters/settings.py`, `
 - [ ] Tool results as `search_result` blocks with citations on; `cache_control` on tools, system and the last input block; the model, `max_tokens`, retries and timeout from settings.
 - [ ] Errors: the spend limit (both documented shapes), overloaded or failing after retries (`model_unavailable`), `refusal` (`model_refused`), any other 400 (`internal_error`). Unknown event types ignored.
 - [ ] Tests against recorded responses. **Ask first:** recording them is one short live session that spends a few cents.
+- [ ] Settings moved from T3: the keys as `SecretStr` required only when enabled, `ASSISTANT_MODEL`, `ASSISTANT_MAX_OUTPUT_TOKENS`, `ASSISTANT_MODEL_MAX_RETRIES`, `ASSISTANT_MODEL_TIMEOUT_S`, `ASSISTANT_ANSWER_TIMEOUT_S`, `ASSISTANT_MAX_TOOL_ROUNDS`, `ASSISTANT_TOOL_MAX_ROWS`; they refuse an SDK timeout that is not below the answer's (ADR 0021). `services.py` builds the answer with T2's tools when enabled, in place of T3's refusal to start.
 
-Verification: `make check` with no credentials. Files: `adapters/language_model.py`, the recordings under `tests/fixtures/`, its test, `pyproject.toml`, `uv.lock`. Size M. Depends on T1. Highest provider risk: if the citations do not arrive as ADR 0021 quotes, ADR 0021 is revisited here, before the tab relies on them.
+Verification: `make check` with no credentials. Files: `adapters/language_model.py`, `adapters/settings.py`, `adapters/http/services.py`, the recordings under `tests/fixtures/`, its test, `pyproject.toml`, `uv.lock`. Size M. Depends on T1. Highest provider risk: if the citations do not arrive as ADR 0021 quotes, ADR 0021 is revisited here, before the tab relies on them.
 
 #### T5. The Assistant tab
 
@@ -138,6 +139,7 @@ Verification: `make check`, `make mutation`. Files: `domain/rules.py`, the tools
 
 #### T12. The budget and concurrent answers
 
+- [ ] Settings: `ASSISTANT_MAX_CONCURRENT`, the daily and monthly budgets, `ASSISTANT_ANSWER_RESERVE_USD` and the four prices (ADR 0022).
 - [ ] A Redis adapter: concurrent answers counted across instances (`assistant_busy`); the reservation in integer micro-dollars against the UTC day and month, undone when it would pass either; replaced by the real cost when the answer ends, for any reason; the provider's limit sets a pause flag until the end of the month.
 - [ ] `GET /api/assistant` answers `paused` with `resumes_at`; `POST /api/answers` answers 503 `assistant_paused`.
 - [ ] Tests with a fixed clock: a day's limit, a month's limit, the turn of a day and of a month, two answers reserving at once, the reservation released after an error.
