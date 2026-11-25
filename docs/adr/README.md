@@ -26,8 +26,9 @@ One decision per file, numbered in order. An accepted ADR binds the code (`AGENT
 | [0020](0020-the-fonts-are-served-by-the-edge.md) | The fonts are served by the edge | Accepted |
 | [0021](0021-the-assistant-is-a-bounded-tool-loop-behind-one-port.md) | The assistant is a bounded tool loop behind one port, without an agent framework | Accepted |
 | [0022](0022-the-assistants-threat-model-and-budget.md) | The assistant's threat model: read-only tools, enforced limits and a budget of our own | Accepted |
-| [0023](0023-the-assistants-api-and-tools.md) | The assistant's API: a status, one POST answered as a stream of typed events, and a closed set of tools | Accepted |
+| [0023](0023-the-assistants-api-and-tools.md) | The assistant's API: a status, one POST answered as a stream of typed events, and a closed set of tools | Accepted; row tables superseded by 0025 |
 | [0024](0024-regulations-by-edition-embedded-in-pgvector.md) | The Sporting Regulations are kept per edition, split by article and embedded in pgvector | Accepted |
+| [0025](0025-find-races-returns-citable-session-rows.md) | `find_races` returns citable `session` rows | Accepted |
 
 ## Template
 

@@ -1,6 +1,6 @@
 # 0023. The assistant's API: a status, one POST answered as a stream of typed events, and a closed set of tools
 
-- Status: Accepted
+- Status: Accepted; the row tables superseded by [0025](0025-find-races-returns-citable-session-rows.md)
 - Date: 2026-11-23
 
 ## Context

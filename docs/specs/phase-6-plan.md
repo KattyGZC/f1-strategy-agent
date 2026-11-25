@@ -42,12 +42,12 @@ Verification: `make check`, `make mutation` (no surviving domain mutant). Files:
 
 #### T2. The first data tools: `find_races`, `race_results`, `driver_strategy`
 
-- [ ] One Pydantic input model per tool; its JSON schema is the tool's `input_schema`.
-- [ ] Our own queries in a `READ ONLY` transaction; a `session_key` the clean model lacks is an error result; results capped by `ASSISTANT_TOOL_MAX_ROWS` with a truncation notice.
-- [ ] Each row becomes a `row` source with its key (`row:<table>:<session_key>:<key...>`).
-- [ ] Testcontainers tests on a synthetic race, including a write attempted inside the read-only transaction being refused.
+- [x] One Pydantic input model per tool; its JSON schema is the tool's `input_schema`.
+- [x] Our own queries in a `READ ONLY` transaction; a `session_key` the clean model lacks is an error result; results capped by `ASSISTANT_TOOL_MAX_ROWS` with a truncation notice (`Found.omitted_rows`; T4 writes the notice).
+- [x] Each row becomes a `row` source with its key (`row:<table>:<session_key>:<key...>`); a race of `find_races` is a `session` row (ADR 0025).
+- [x] Testcontainers tests on a synthetic race, including a write attempted inside the read-only transaction being refused.
 
-Verification: `make check`. Files: a new `adapters/assistant_tools.py` (name fixed when the task starts), its test. Size M. Depends on T1.
+Verification: `make check`. Files: `adapters/assistant_tools.py`, the reads in `adapters/clean_store.py`, their test. Size M. Depends on T1.
 
 #### T3. Settings and the HTTP contract
 

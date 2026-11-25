@@ -1,7 +1,7 @@
 """The clean model in PostgreSQL: the run table and the replace of a session (ADR 0008), the
 read of a session's rows for its replay (ADR 0009), the catalog of loaded sessions, each
-race's calibration with its pit loss (ADR 0014, ADR 0015), and its read for the simulator
-(ADR 0017)."""
+race's calibration with its pit loss (ADR 0014, ADR 0015), its read for the simulator
+(ADR 0017), and the reads of the assistant's tools (ADR 0022)."""
 
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
@@ -15,6 +15,7 @@ from psycopg.rows import TupleRow, class_row
 from psycopg.types.enum import EnumInfo, register_enum
 from psycopg_pool import AsyncConnectionPool
 
+from f1_strategy.application.assistant import ToolFailedError
 from f1_strategy.application.calibration import (
     CalibrationFailed,
     CalibrationResult,
@@ -38,6 +39,7 @@ from f1_strategy.application.transform import (
 from f1_strategy.domain.clean import (
     CleanRecord,
     Compound,
+    DriverSession,
     Flag,
     FlagScope,
     Interval,
@@ -47,6 +49,8 @@ from f1_strategy.domain.clean import (
     Position,
     RaceControl,
     RaceControlCategory,
+    SessionResult,
+    StartingGrid,
     Stint,
     TeamRadio,
     Weather,
@@ -172,9 +176,74 @@ SAVE_PIT_STOP_EXCLUSION = """
     INSERT INTO calibration_pit_stop_exclusion (session_key, reason, stops) VALUES (%s, %s, %s)
 """
 
+RACE_LISTING_QUERY = """
+    SELECT s.session_key, s.session_name, s.date_start, m.year, m.meeting_name,
+        m.circuit_short_name, m.country_name,
+        EXISTS (SELECT 1 FROM calibration c WHERE c.session_key = s.session_key),
+        count(*) OVER ()
+    FROM session s JOIN meeting m USING (meeting_key)
+    WHERE s.session_type = %(race)s
+        AND (%(year)s::integer IS NULL OR m.year = %(year)s)
+        AND (%(name)s::text IS NULL
+            OR strpos(lower(m.meeting_name), lower(%(name)s)) > 0
+            OR strpos(lower(m.circuit_short_name), lower(%(name)s)) > 0
+            OR strpos(lower(m.country_name), lower(%(name)s)) > 0)
+    ORDER BY s.date_start, s.session_key
+    LIMIT %(limit)s
+"""
+RACE_HEADER_QUERY = """
+    SELECT s.session_key, m.year, m.meeting_name
+    FROM session s JOIN meeting m USING (meeting_key) WHERE s.session_key = %s
+"""
+
 RUN_COLUMNS = (
     "status, input_fingerprint, transform_version, error_kind, loaded_fingerprint, loaded_version"
 )
+
+
+@dataclass(frozen=True)
+class RaceListing:
+    session_key: int
+    session_name: SessionName
+    date_start: datetime
+    year: int
+    meeting_name: str
+    circuit_short_name: str
+    country_name: str
+    calibrated: bool
+
+
+@dataclass(frozen=True)
+class RaceListings:
+    """`matches` counts every race the filters match, the listed ones included."""
+
+    races: tuple[RaceListing, ...]
+    matches: int
+
+
+@dataclass(frozen=True)
+class RaceHeader:
+    session_key: int
+    year: int
+    meeting_name: str
+
+
+@dataclass(frozen=True)
+class RaceClassification:
+    race: RaceHeader
+    drivers: tuple[DriverSession, ...]
+    results: tuple[SessionResult, ...]
+    starting_grid: tuple[StartingGrid, ...]
+
+
+@dataclass(frozen=True)
+class DriverRace:
+    """`driver` is None when the driver did not take part in the session."""
+
+    race: RaceHeader
+    driver: DriverSession | None
+    stints: tuple[Stint, ...]
+    pits: tuple[Pit, ...]
 
 
 def connection_pool(postgres_uri: str, max_size: int, connect_timeout_s: int) -> Pool:
@@ -557,6 +626,104 @@ class PostgresCalibratedRaces:
                 pit_loss=pit_loss[0] if pit_loss else None,
                 pit_stop_exclusions=await read(PitStopExclusion, PIT_STOP_EXCLUSIONS_QUERY),
             )
+
+
+class PostgresRaceFacts:
+    """What the assistant's tools read, each in one read-only snapshot (ADR 0022). A store that
+    cannot be reached fails the tool; any other database error is a bug and fails the answer."""
+
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def races(self, year: int | None, name: str | None, limit: int) -> RaceListings:
+        """The Race sessions of a year, or whose meeting, circuit or country contains `name`
+        in any case, the earliest first."""
+        parameters = {"race": SessionType.RACE, "year": year, "name": name, "limit": limit}
+        async with _tool_read(self._pool) as connection:
+            await _register_enums(connection, CATALOG_ENUM_TYPES)
+            cursor = await connection.execute(RACE_LISTING_QUERY, parameters)
+            rows = await cursor.fetchall()
+        races = tuple(RaceListing(*row[:-1]) for row in rows)
+        return RaceListings(races, int(rows[0][-1]) if rows else 0)
+
+    async def classification(self, session_key: int) -> RaceClassification | None:
+        """None when the clean model does not hold the session."""
+        async with _tool_read(self._pool) as connection:
+            race = await _race_header(connection, session_key)
+            if race is None:
+                return None
+            read = _SessionReader(connection, session_key)
+            return RaceClassification(
+                race,
+                drivers=await read(DriverSession, "driver_session", ("driver_number",)),
+                results=await read(SessionResult, "session_result", ("driver_number",)),
+                starting_grid=await read(StartingGrid, "starting_grid", ("driver_number",)),
+            )
+
+    async def driver_race(self, session_key: int, driver_number: int) -> DriverRace | None:
+        """None when the clean model does not hold the session."""
+        async with _tool_read(self._pool) as connection:
+            race = await _race_header(connection, session_key)
+            if race is None:
+                return None
+            await _register_enums(connection, (("compound", Compound),))
+            read = _DriverReader(connection, session_key, driver_number)
+            drivers = await read(DriverSession, "driver_session", "driver_number")
+            return DriverRace(
+                race,
+                driver=drivers[0] if drivers else None,
+                stints=await read(Stint, "stint", "stint_number"),
+                pits=await read(Pit, "pit", "lap_number"),
+            )
+
+
+@asynccontextmanager
+async def read_only(pool: Pool) -> AsyncIterator[AsyncConnection[TupleRow]]:
+    """A connection in a read-only snapshot: PostgreSQL refuses any write made through it."""
+    async with pool.connection() as connection, connection.transaction():
+        await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        yield connection
+
+
+@asynccontextmanager
+async def _tool_read(pool: Pool) -> AsyncIterator[AsyncConnection[TupleRow]]:
+    try:
+        async with read_only(pool) as connection:
+            yield connection
+    except OperationalError as error:
+        raise ToolFailedError(type(error).__name__) from error
+
+
+async def _race_header(
+    connection: AsyncConnection[TupleRow], session_key: int
+) -> RaceHeader | None:
+    async with connection.cursor(row_factory=class_row(RaceHeader)) as cursor:
+        await cursor.execute(RACE_HEADER_QUERY, [session_key])
+        return await cursor.fetchone()
+
+
+class _DriverReader:
+    def __init__(
+        self, connection: AsyncConnection[TupleRow], session_key: int, driver_number: int
+    ) -> None:
+        self._connection = connection
+        self._key = [session_key, driver_number]
+
+    async def __call__[T: CleanRecord](
+        self, row_type: type[T], table: str, order_by: str
+    ) -> tuple[T, ...]:
+        statement = sql.SQL(
+            "SELECT {columns} FROM {table} WHERE session_key = %s AND driver_number = %s"
+            " ORDER BY {key}"
+        )
+        query = statement.format(
+            columns=_identifiers(column_names(row_type)),
+            table=sql.Identifier(table),
+            key=sql.Identifier(order_by),
+        )
+        async with self._connection.cursor(row_factory=class_row(row_type)) as cursor:
+            await cursor.execute(query, self._key)
+            return tuple(await cursor.fetchall())
 
 
 class _CalibrationReader:
