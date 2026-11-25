@@ -1,6 +1,103 @@
 {
   "components": {
     "schemas": {
+      "AnswerEventBody": {
+        "discriminator": {
+          "mapping": {
+            "citation": "#/components/schemas/CitationEventBody",
+            "declined": "#/components/schemas/DeclinedEventBody",
+            "done": "#/components/schemas/DoneEventBody",
+            "error": "#/components/schemas/ErrorEventBody",
+            "step": "#/components/schemas/StepEventBody",
+            "text": "#/components/schemas/TextEventBody"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StepEventBody"
+          },
+          {
+            "$ref": "#/components/schemas/TextEventBody"
+          },
+          {
+            "$ref": "#/components/schemas/CitationEventBody"
+          },
+          {
+            "$ref": "#/components/schemas/DeclinedEventBody"
+          },
+          {
+            "$ref": "#/components/schemas/DoneEventBody"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorEventBody"
+          }
+        ]
+      },
+      "AnswerOutcome": {
+        "enum": [
+          "answered",
+          "declined"
+        ],
+        "title": "AnswerOutcome",
+        "type": "string"
+      },
+      "AnswerRequest": {
+        "properties": {
+          "question": {
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AnswerRequest",
+        "type": "object"
+      },
+      "AssistantResponse": {
+        "properties": {
+          "resumes_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumes At"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssistantState"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionResponse"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "resumes_at",
+          "suggestions"
+        ],
+        "title": "AssistantResponse",
+        "type": "object"
+      },
+      "AssistantState": {
+        "enum": [
+          "available",
+          "paused",
+          "disabled"
+        ],
+        "title": "AssistantState",
+        "type": "string"
+      },
       "Caveat": {
         "enum": [
           "pit_loss_not_reliable",
@@ -9,6 +106,36 @@
         ],
         "title": "Caveat",
         "type": "string"
+      },
+      "CitationEventBody": {
+        "properties": {
+          "kind": {
+            "const": "citation",
+            "default": "citation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RowSourceBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "number",
+          "source"
+        ],
+        "title": "CitationEventBody",
+        "type": "object"
       },
       "Compound": {
         "enum": [
@@ -52,6 +179,39 @@
         "title": "CompoundResponse",
         "type": "object"
       },
+      "DeclineReason": {
+        "enum": [
+          "future_race",
+          "live_data",
+          "season_not_loaded",
+          "not_formula_1",
+          "other"
+        ],
+        "title": "DeclineReason",
+        "type": "string"
+      },
+      "DeclinedEventBody": {
+        "properties": {
+          "kind": {
+            "const": "declined",
+            "default": "declined",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/DeclineReason"
+          },
+          "suggestion_id": {
+            "$ref": "#/components/schemas/SuggestionId"
+          }
+        },
+        "required": [
+          "reason",
+          "suggestion_id"
+        ],
+        "title": "DeclinedEventBody",
+        "type": "object"
+      },
       "Dependency": {
         "enum": [
           "postgres",
@@ -66,6 +226,24 @@
           "failed"
         ],
         "type": "string"
+      },
+      "DoneEventBody": {
+        "properties": {
+          "kind": {
+            "const": "done",
+            "default": "done",
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AnswerOutcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "DoneEventBody",
+        "type": "object"
       },
       "DriverResponse": {
         "properties": {
@@ -110,6 +288,14 @@
           "driver_not_calibrated",
           "replay_failed",
           "too_many_replays",
+          "assistant_disabled",
+          "assistant_paused",
+          "assistant_busy",
+          "answer_timeout",
+          "tool_rounds_exceeded",
+          "answer_too_long",
+          "model_unavailable",
+          "model_refused",
           "invalid_request",
           "route_not_found",
           "method_not_allowed",
@@ -120,6 +306,34 @@
         ],
         "title": "ErrorCode",
         "type": "string"
+      },
+      "ErrorEventBody": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "const": "error",
+            "default": "error",
+            "title": "Kind",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "request_id"
+        ],
+        "title": "ErrorEventBody",
+        "type": "object"
       },
       "ErrorResponse": {
         "properties": {
@@ -1127,6 +1341,97 @@
         "title": "ReplaySpeed",
         "type": "integer"
       },
+      "RowSourceBody": {
+        "properties": {
+          "key": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Key",
+            "type": "object"
+          },
+          "kind": {
+            "const": "row",
+            "default": "row",
+            "title": "Kind",
+            "type": "string"
+          },
+          "meeting_name": {
+            "title": "Meeting Name",
+            "type": "string"
+          },
+          "session_key": {
+            "title": "Session Key",
+            "type": "integer"
+          },
+          "table": {
+            "$ref": "#/components/schemas/RowTable"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Values",
+            "type": "object"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "table",
+          "session_key",
+          "meeting_name",
+          "year",
+          "key",
+          "values"
+        ],
+        "title": "RowSourceBody",
+        "type": "object"
+      },
+      "RowTable": {
+        "enum": [
+          "session",
+          "session_result",
+          "starting_grid",
+          "stint",
+          "pit",
+          "lap",
+          "race_control",
+          "weather"
+        ],
+        "title": "RowTable",
+        "type": "string"
+      },
       "SeekRequest": {
         "properties": {
           "lap_number": {
@@ -1501,6 +1806,44 @@
         "title": "StartReplayRequest",
         "type": "object"
       },
+      "StepEventBody": {
+        "properties": {
+          "kind": {
+            "const": "step",
+            "default": "step",
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StepStatus"
+          },
+          "step": {
+            "title": "Step",
+            "type": "integer"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/ToolName"
+          }
+        },
+        "required": [
+          "step",
+          "tool",
+          "status"
+        ],
+        "title": "StepEventBody",
+        "type": "object"
+      },
+      "StepStatus": {
+        "enum": [
+          "running",
+          "done",
+          "empty",
+          "rejected",
+          "failed"
+        ],
+        "title": "StepStatus",
+        "type": "string"
+      },
       "StintRequest": {
         "properties": {
           "compound": {
@@ -1594,6 +1937,33 @@
           }
         ]
       },
+      "SuggestionId": {
+        "enum": [
+          "norris_monza_stops",
+          "silverstone_winner",
+          "leclerc_monza_two_stops",
+          "two_compounds_rule"
+        ],
+        "title": "SuggestionId",
+        "type": "string"
+      },
+      "SuggestionResponse": {
+        "properties": {
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "suggestion_id": {
+            "$ref": "#/components/schemas/SuggestionId"
+          }
+        },
+        "required": [
+          "suggestion_id",
+          "question"
+        ],
+        "title": "SuggestionResponse",
+        "type": "object"
+      },
       "TeamRadioEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1624,6 +1994,40 @@
         ],
         "title": "TeamRadioEvent",
         "type": "object"
+      },
+      "TextEventBody": {
+        "properties": {
+          "delta": {
+            "title": "Delta",
+            "type": "string"
+          },
+          "kind": {
+            "const": "text",
+            "default": "text",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delta"
+        ],
+        "title": "TextEventBody",
+        "type": "object"
+      },
+      "ToolName": {
+        "enum": [
+          "find_races",
+          "race_results",
+          "driver_strategy",
+          "lap_times",
+          "race_control",
+          "weather",
+          "search_rules",
+          "simulate_strategies",
+          "decline_question"
+        ],
+        "title": "ToolName",
+        "type": "string"
       },
       "TrackTemperatureResponse": {
         "properties": {
@@ -1712,6 +2116,130 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/answers": {
+      "post": {
+        "description": "Answers one question about the races of the clean model. Each event's SSE `event` is its\n`kind`; the stream ends after `done` or `error`. Events have no id: a lost connection means\nasking again. The question is trimmed, and sent to the model providers, never stored.",
+        "operationId": "answer_question_api_answers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "properties": {
+                    "data": {
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/AnswerEventBody"
+                          },
+                          {
+                            "$ref": "#/components/schemas/ServerSentEvent"
+                          }
+                        ],
+                        "title": "Streamitem Answer Question Api Answers Post"
+                      },
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestResponse"
+                }
+              }
+            },
+            "description": "Invalid Request"
+          },
+          "500": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "summary": "Answer Question",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant": {
+      "get": {
+        "description": "Whether a question can be asked now, and the questions to suggest.",
+        "operationId": "read_assistant_api_assistant_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Read Assistant",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Liveness: the process answers.",

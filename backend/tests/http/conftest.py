@@ -36,6 +36,8 @@ def settings(postgres_server_uri: str, redis_server_uri: str) -> ApiSettings:
         replay_tick_s=0.02,
         replay_lease_s=1,
         replay_append_batch=2,
+        assistant_enabled=False,
+        assistant_question_max_chars=500,
     )
 
 

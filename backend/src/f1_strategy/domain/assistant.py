@@ -65,6 +65,10 @@ class AnswerError(StrEnum):
     INTERNAL_ERROR = "internal_error"
 
 
+class SourceKind(StrEnum):
+    ROW = "row"
+
+
 class RowTable(StrEnum):
     SESSION = "session"
     SESSION_RESULT = "session_result"

@@ -72,6 +72,8 @@ services:
       REPLAY_APPEND_BATCH: ${REPLAY_APPEND_BATCH:?}
       LOG_LEVEL: ${LOG_LEVEL:?}
       READINESS_TIMEOUT_S: ${READINESS_TIMEOUT_S:?}
+      ASSISTANT_ENABLED: ${ASSISTANT_ENABLED:?}
+      ASSISTANT_QUESTION_MAX_CHARS: ${ASSISTANT_QUESTION_MAX_CHARS:?}
     depends_on:
       postgres:
         condition: service_healthy

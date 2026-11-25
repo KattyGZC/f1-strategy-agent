@@ -3,7 +3,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import FastAPI
 
-from f1_strategy.adapters.http import health, races, replays, sessions, simulations
+from f1_strategy.adapters.http import assistant, health, races, replays, sessions, simulations
 from f1_strategy.adapters.http.errors import install_error_handlers
 from f1_strategy.adapters.http.responses import EVERY_ROUTE
 from f1_strategy.adapters.http.services import ApiServices, api_services
@@ -44,6 +44,7 @@ def create_app(services: ServicesFactory = services_from_settings) -> FastAPI:
     app.include_router(sessions.router, prefix="/api")
     app.include_router(races.router, prefix="/api")
     app.include_router(simulations.router, prefix="/api")
+    app.include_router(assistant.router, prefix="/api")
     install_error_handlers(app)
     app.add_middleware(RequestTracing)
     return app

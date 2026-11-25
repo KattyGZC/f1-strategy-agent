@@ -4,6 +4,48 @@
  */
 
 export interface paths {
+    "/api/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Question
+         * @description Answers one question about the races of the clean model. Each event's SSE `event` is its
+         *     `kind`; the stream ends after `done` or `error`. Events have no id: a lost connection means
+         *     asking again. The question is trimmed, and sent to the model providers, never stored.
+         */
+        post: operations["answer_question_api_answers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Assistant
+         * @description Whether a question can be asked now, and the questions to suggest.
+         */
+        get: operations["read_assistant_api_assistant_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -278,11 +320,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AnswerEventBody: components["schemas"]["StepEventBody"] | components["schemas"]["TextEventBody"] | components["schemas"]["CitationEventBody"] | components["schemas"]["DeclinedEventBody"] | components["schemas"]["DoneEventBody"] | components["schemas"]["ErrorEventBody"];
+        /**
+         * AnswerOutcome
+         * @enum {string}
+         */
+        AnswerOutcome: "answered" | "declined";
+        /** AnswerRequest */
+        AnswerRequest: {
+            /** Question */
+            question: string;
+        };
+        /** AssistantResponse */
+        AssistantResponse: {
+            /** Resumes At */
+            resumes_at: string | null;
+            state: components["schemas"]["AssistantState"];
+            /** Suggestions */
+            suggestions: components["schemas"]["SuggestionResponse"][];
+        };
+        /**
+         * AssistantState
+         * @enum {string}
+         */
+        AssistantState: "available" | "paused" | "disabled";
         /**
          * Caveat
          * @enum {string}
          */
         Caveat: "pit_loss_not_reliable" | "extrapolated_tyre_age" | "one_dry_compound";
+        /** CitationEventBody */
+        CitationEventBody: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "citation";
+            /** Number */
+            number: number;
+            source: components["schemas"]["RowSourceBody"] | null;
+        };
         /**
          * Compound
          * @enum {string}
@@ -308,12 +385,36 @@ export interface components {
             residual_rmse_s: number;
         };
         /**
+         * DeclineReason
+         * @enum {string}
+         */
+        DeclineReason: "future_race" | "live_data" | "season_not_loaded" | "not_formula_1" | "other";
+        /** DeclinedEventBody */
+        DeclinedEventBody: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "declined";
+            reason: components["schemas"]["DeclineReason"];
+            suggestion_id: components["schemas"]["SuggestionId"];
+        };
+        /**
          * Dependency
          * @enum {string}
          */
         Dependency: "postgres" | "redis";
         /** @enum {string} */
         DependencyState: "ok" | "failed";
+        /** DoneEventBody */
+        DoneEventBody: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "done";
+            outcome: components["schemas"]["AnswerOutcome"];
+        };
         /** DriverResponse */
         DriverResponse: {
             /** Driver Number */
@@ -334,7 +435,20 @@ export interface components {
          * ErrorCode
          * @enum {string}
          */
-        ErrorCode: "replay_not_found" | "session_not_loaded" | "lap_not_found" | "race_not_calibrated" | "driver_not_calibrated" | "replay_failed" | "too_many_replays" | "invalid_request" | "route_not_found" | "method_not_allowed" | "not_ready" | "internal_error" | "payload_too_large" | "rate_limited";
+        ErrorCode: "replay_not_found" | "session_not_loaded" | "lap_not_found" | "race_not_calibrated" | "driver_not_calibrated" | "replay_failed" | "too_many_replays" | "assistant_disabled" | "assistant_paused" | "assistant_busy" | "answer_timeout" | "tool_rounds_exceeded" | "answer_too_long" | "model_unavailable" | "model_refused" | "invalid_request" | "route_not_found" | "method_not_allowed" | "not_ready" | "internal_error" | "payload_too_large" | "rate_limited";
+        /** ErrorEventBody */
+        ErrorEventBody: {
+            code: components["schemas"]["ErrorCode"];
+            /** Detail */
+            detail: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "error";
+            /** Request Id */
+            request_id: string;
+        };
         /** ErrorResponse */
         ErrorResponse: {
             code: components["schemas"]["ErrorCode"];
@@ -708,6 +822,35 @@ export interface components {
          * @enum {integer}
          */
         ReplaySpeed: 1 | 2 | 5 | 10 | 20 | 60;
+        /** RowSourceBody */
+        RowSourceBody: {
+            /** Key */
+            key: {
+                [key: string]: number | string;
+            };
+            /**
+             * Kind
+             * @default row
+             * @constant
+             */
+            kind: "row";
+            /** Meeting Name */
+            meeting_name: string;
+            /** Session Key */
+            session_key: number;
+            table: components["schemas"]["RowTable"];
+            /** Values */
+            values: {
+                [key: string]: string | boolean | number | null;
+            };
+            /** Year */
+            year: number;
+        };
+        /**
+         * RowTable
+         * @enum {string}
+         */
+        RowTable: "session" | "session_result" | "starting_grid" | "stint" | "pit" | "lap" | "race_control" | "weather";
         /** SeekRequest */
         SeekRequest: {
             /** Lap Number */
@@ -870,6 +1013,23 @@ export interface components {
             session_key: number;
             speed: components["schemas"]["ReplaySpeed"];
         };
+        /** StepEventBody */
+        StepEventBody: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "step";
+            status: components["schemas"]["StepStatus"];
+            /** Step */
+            step: number;
+            tool: components["schemas"]["ToolName"];
+        };
+        /**
+         * StepStatus
+         * @enum {string}
+         */
+        StepStatus: "running" | "done" | "empty" | "rejected" | "failed";
         /** StintRequest */
         StintRequest: {
             compound: components["schemas"]["Compound"];
@@ -900,6 +1060,17 @@ export interface components {
          */
         StrategyRejection: "no_stints" | "zero_laps" | "negative_tyre_age" | "compound_not_calibrated" | "laps_do_not_add_up" | "no_pit_loss";
         StrategyResponse: components["schemas"]["SimulatedResponse"] | components["schemas"]["RejectedResponse"];
+        /**
+         * SuggestionId
+         * @enum {string}
+         */
+        SuggestionId: "norris_monza_stops" | "silverstone_winner" | "leclerc_monza_two_stops" | "two_compounds_rule";
+        /** SuggestionResponse */
+        SuggestionResponse: {
+            /** Question */
+            question: string;
+            suggestion_id: components["schemas"]["SuggestionId"];
+        };
         /** TeamRadioEvent */
         TeamRadioEvent: {
             /**
@@ -917,6 +1088,21 @@ export interface components {
             /** Recording Url */
             recording_url: string;
         };
+        /** TextEventBody */
+        TextEventBody: {
+            /** Delta */
+            delta: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "text";
+        };
+        /**
+         * ToolName
+         * @enum {string}
+         */
+        ToolName: "find_races" | "race_results" | "driver_strategy" | "lap_times" | "race_control" | "weather" | "search_rules" | "simulate_strategies" | "decline_question";
         /** TrackTemperatureResponse */
         TrackTemperatureResponse: {
             /** Max C */
@@ -962,6 +1148,86 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    answer_question_api_answers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Invalid Request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvalidRequestResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_assistant_api_assistant_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     read_health_api_health_get: {
         parameters: {
             query?: never;
