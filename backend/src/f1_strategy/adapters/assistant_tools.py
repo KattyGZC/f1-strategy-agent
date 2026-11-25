@@ -1,7 +1,7 @@
-"""The assistant's data tools (ADR 0023). Each validates the model's input with its Pydantic
-model, reads the clean model through the clean store, and returns each row as a citable block
-whose source holds the row as read (ADR 0021). A result past its cap is cut and says how many
-rows it left out."""
+"""The assistant's tools (ADR 0023): the data tools, and the decline. Each validates the
+model's input with its Pydantic model. A data tool reads the clean model through the clean
+store and returns each row as a citable block whose source holds the row as read (ADR 0021);
+a result past its cap is cut and says how many rows it left out."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
@@ -9,9 +9,24 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError
 
+from f1_strategy.adapters.assistant_suggestions import SuggestionId
 from f1_strategy.adapters.clean_store import PostgresRaceFacts, RaceHeader, RaceListing
-from f1_strategy.application.assistant import Empty, Found, Rejected, ResultBlock, ToolSpec
-from f1_strategy.domain.assistant import RowKey, RowSource, RowTable, RowValue, ToolName
+from f1_strategy.application.assistant import (
+    Declined,
+    Empty,
+    Found,
+    Rejected,
+    ResultBlock,
+    ToolSpec,
+)
+from f1_strategy.domain.assistant import (
+    DeclineReason,
+    RowKey,
+    RowSource,
+    RowTable,
+    RowValue,
+    ToolName,
+)
 from f1_strategy.domain.clean import CleanRow, DriverSession, SessionResult
 
 FIRST_SEASON = 1950
@@ -37,6 +52,13 @@ class DriverStrategyInput(BaseModel):
 
     session_key: PositiveInt
     driver_number: PositiveInt
+
+
+class DeclineQuestionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: DeclineReason
+    suggestion_id: SuggestionId
 
 
 class FindRaces:
@@ -122,6 +144,18 @@ class DriverStrategy:
                 f" in session_key {session_key}"
             )
         return _capped(sources, self._max_rows)
+
+
+class DeclineQuestion:
+    @property
+    def spec(self) -> ToolSpec:
+        return ToolSpec(ToolName.DECLINE_QUESTION, DeclineQuestionInput.model_json_schema())
+
+    async def run(self, arguments: Mapping[str, object]) -> Declined | Rejected:
+        request = _parse(DeclineQuestionInput, arguments)
+        if isinstance(request, Rejected):
+            return request
+        return Declined(request.reason, request.suggestion_id)
 
 
 class _Rows:

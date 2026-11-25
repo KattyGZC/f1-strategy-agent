@@ -6,7 +6,13 @@ from decimal import Decimal
 import pytest
 from psycopg import errors
 
-from f1_strategy.adapters.assistant_tools import DriverStrategy, FindRaces, RaceResults
+from f1_strategy.adapters.assistant_suggestions import SuggestionId
+from f1_strategy.adapters.assistant_tools import (
+    DeclineQuestion,
+    DriverStrategy,
+    FindRaces,
+    RaceResults,
+)
 from f1_strategy.adapters.clean_store import (
     Pool,
     PostgresCalibrationStore,
@@ -17,6 +23,7 @@ from f1_strategy.adapters.clean_store import (
 )
 from f1_strategy.adapters.migrate import upgrade
 from f1_strategy.application.assistant import (
+    Declined,
     Empty,
     Found,
     Rejected,
@@ -25,7 +32,14 @@ from f1_strategy.application.assistant import (
 )
 from f1_strategy.application.calibration import Fingerprint
 from f1_strategy.application.transform import Load, Version
-from f1_strategy.domain.assistant import RowKey, RowSource, RowTable, RowValue, ToolName
+from f1_strategy.domain.assistant import (
+    DeclineReason,
+    RowKey,
+    RowSource,
+    RowTable,
+    RowValue,
+    ToolName,
+)
 from f1_strategy.domain.clean import (
     CleanRow,
     CleanSession,
@@ -463,3 +477,45 @@ async def test_a_write_inside_the_read_only_transaction_is_refused(pool: Pool) -
     async with read_only(pool) as connection:
         with pytest.raises(errors.ReadOnlySqlTransaction):
             await connection.execute("DELETE FROM session WHERE session_key = %s", [RACE_KEY])
+
+
+@pytest.mark.anyio
+async def test_declining_names_its_reason_and_one_of_our_suggestions() -> None:
+    result = await DeclineQuestion().run(
+        {"reason": "future_race", "suggestion_id": SuggestionId.NORRIS_MONZA_STOPS}
+    )
+
+    assert result == Declined(DeclineReason.FUTURE_RACE, SuggestionId.NORRIS_MONZA_STOPS)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param(
+            {"reason": "future_race", "suggestion_id": "who_wins_next"},
+            "suggestion_id: Input should be 'norris_monza_stops', 'silverstone_winner',"
+            " 'leclerc_monza_two_stops' or 'two_compounds_rule'",
+            id="suggestion",
+        ),
+        pytest.param(
+            {"reason": "boring", "suggestion_id": "silverstone_winner"},
+            "reason: Input should be 'future_race', 'live_data', 'season_not_loaded',"
+            " 'not_formula_1' or 'other'",
+            id="reason",
+        ),
+    ],
+)
+@pytest.mark.anyio
+async def test_a_decline_outside_our_reasons_or_suggestions_is_rejected(
+    arguments: dict[str, object], message: str
+) -> None:
+    assert await DeclineQuestion().run(arguments) == Rejected(message)
+
+
+def test_the_decline_offers_the_json_schema_of_its_input() -> None:
+    spec = DeclineQuestion().spec
+
+    assert (spec.name, spec.input_schema.get("required")) == (
+        ToolName.DECLINE_QUESTION,
+        ["reason", "suggestion_id"],
+    )
