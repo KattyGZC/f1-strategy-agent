@@ -27,6 +27,7 @@ Entries are written with the `devlog` skill (`.claude/skills/devlog/`) at the en
 | 2026-11-22 | [01. Phase 6: intent and spec](2026-11-22-01-phase-6-intent-and-spec.md) |
 | 2026-11-23 | [01. Phase 6: design of the assistant](2026-11-23-01-phase-6-design.md) |
 | 2026-11-23 | [02. Phase 6: the plan](2026-11-23-02-phase-6-plan.md) |
+| 2026-11-25 | [01. Phase 6: the answer's contract and the tool loop](2026-11-25-01-phase-6-answer-loop.md) |
 
 ## Template
 

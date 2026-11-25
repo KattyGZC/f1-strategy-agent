@@ -34,9 +34,9 @@ T7 to T10 depend on no other task and can run in parallel with slice A and B.
 
 #### T1. The answer's contract and the tool loop
 
-- [ ] `domain/assistant.py`: the closed sets `ToolName`, `AnswerEventKind`, `StepStatus`, `DeclineReason`, the answer outcomes, the `Source` union (`row`, `article`, `simulation`) and the answer events, as frozen dataclasses (ADR 0023).
-- [ ] `application/assistant.py`: the `LanguageModel` and tool ports and the bounded loop of ADR 0021, against a scripted fake model. Limits come in as values: tool rounds, output tokens per turn (a `max_tokens` stop), the answer's timeout through a passed-in clock.
-- [ ] Tests: an answer that ends, each limit reached with its code, an invalid tool input (`rejected`, counts as a round), a failing tool (`failed`), an empty result (`empty`), `decline_question`, a citation outside the ledger dropped, a stop reason the loop does not know.
+- [x] `domain/assistant.py`: the closed sets `ToolName`, `AnswerEventKind`, `StepStatus`, `DeclineReason`, the answer outcomes and error codes, the `row` source and the answer events, as frozen dataclasses (ADR 0023), and the ledger that numbers citations. The `article` source joins in T11 and the `simulation` source in T6, where their fields are built and tested.
+- [x] `application/assistant.py`: the `LanguageModel` and tool ports and the bounded loop of ADR 0021, against a scripted fake model. Limits come in as values: tool rounds, output tokens per turn (a `max_tokens` stop), the answer's timeout through a passed-in timer. Tool inputs are validated by each tool's adapter, which answers `Rejected`; the loop never imports Pydantic.
+- [x] Tests: an answer that ends, each limit reached with its code, an invalid tool input (`rejected`, counts as a round), a failing tool (`failed`), an empty result (`empty`), `decline_question`, a citation outside the ledger dropped, a stop reason the loop does not know.
 
 Verification: `make check`, `make mutation` (no surviving domain mutant). Files: 2 source, 2 test. Size M. Depends on nothing.
 
