@@ -38,6 +38,19 @@ def test_a_row_keyed_by_an_instant_names_it_in_utc_iso_format() -> None:
     assert source_id(WEATHER) == "row:weather:9590:2024-09-01T13:10:00+00:00"
 
 
+def test_a_session_row_is_keyed_by_its_session_alone() -> None:
+    race = RowSource(
+        table=RowTable.SESSION,
+        session_key=9590,
+        meeting_name="Italian Grand Prix",
+        year=2024,
+        key={},
+        values={"session_name": "Race"},
+    )
+
+    assert source_id(race) == "row:session:9590"
+
+
 def test_the_first_citation_of_a_source_carries_it_and_later_ones_only_its_number() -> None:
     ledger = CitationLedger()
     ledger.record(STINT)

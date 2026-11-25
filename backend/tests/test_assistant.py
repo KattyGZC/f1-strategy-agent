@@ -62,7 +62,9 @@ STINT = RowSource(
     key={"driver_number": 4, "stint_number": 2},
     values={"compound": "HARD", "lap_start": 17, "lap_end": 53},
 )
-STINTS_FOUND = Found((ResultBlock(STINT, title="Norris, stint 2", text="HARD, laps 17 to 53"),))
+STINTS_FOUND = Found(
+    (ResultBlock(STINT, title="Norris, stint 2", text="HARD, laps 17 to 53"),), omitted_rows=0
+)
 NORRIS = {"session_key": 9590, "driver_number": 4}
 
 

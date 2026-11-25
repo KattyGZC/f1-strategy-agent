@@ -113,7 +113,10 @@ class ResultBlock:
 
 @dataclass(frozen=True)
 class Found:
+    """`omitted_rows` counts the rows past the tool's cap, which the model can narrow to."""
+
     blocks: tuple[ResultBlock, ...]
+    omitted_rows: int
 
 
 @dataclass(frozen=True)

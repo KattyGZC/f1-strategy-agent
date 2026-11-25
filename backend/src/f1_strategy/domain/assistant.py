@@ -66,6 +66,7 @@ class AnswerError(StrEnum):
 
 
 class RowTable(StrEnum):
+    SESSION = "session"
     SESSION_RESULT = "session_result"
     STARTING_GRID = "starting_grid"
     STINT = "stint"
@@ -135,8 +136,8 @@ type AnswerEvent = StepEvent | TextEvent | CitationEvent | DeclinedEvent | DoneE
 
 def source_id(source: Source) -> str:
     """The id a tool result block carries, and the model's citations name."""
-    key = ":".join(_key_part(value) for value in source.key.values())
-    return f"row:{source.table}:{source.session_key}:{key}"
+    parts = (str(source.session_key), *(_key_part(value) for value in source.key.values()))
+    return ":".join(("row", source.table, *parts))
 
 
 def _key_part(value: RowKey) -> str:
